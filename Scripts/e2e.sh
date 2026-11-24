@@ -177,6 +177,8 @@ api_request() {
 PEER_ID="$(api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/status | python3 -c 'import json,sys; print(json.load(sys.stdin)["myID"])')"
 APP_LOCAL_DEVICE_CONFIGURED="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/devices | python3 -c 'import json,sys; devices=json.load(sys.stdin); print(str(any(d.get("deviceID")==sys.argv[1] for d in devices)).lower())' "$APP_ID")"
 [[ "$APP_LOCAL_DEVICE_CONFIGURED" == true ]] || fail "The core config no longer contains its local device entry."
+APP_LOCAL_DEVICE_NAME="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/devices | python3 -c 'import json,sys; devices=json.load(sys.stdin); device=next((d for d in devices if d.get("deviceID")==sys.argv[1]), {}); print(device.get("name", ""))' "$APP_ID")"
+[[ "$APP_LOCAL_DEVICE_NAME" == RooSync ]] || fail "The local core device name is not RooSync."
 
 add_device() {
 	local base=$1 key=$2 id=$3 name=$4 address=$5 defaults body
@@ -256,6 +258,8 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-maximum-concurrent-test-simulator-destinations 1 \
 	CODE_SIGNING_ALLOWED=NO test-without-building \
 	-only-testing:RooSyncUITests/RooSyncUITests/testFirstRunShowsDeviceIdentityAndSyncAction \
+	-only-testing:RooSyncUITests/RooSyncUITests/testEmbeddedRESTRejectsRequestsWithoutAPIKey \
+	-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
 	-only-testing:RooSyncUITests/RooSyncUITests/testEmbeddedRESTRejectsRequestsWithoutAPIKey \
 	-only-testing:RooSyncUITests/RooSyncUITests/testPauseE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testResumeE2ESyncFolder \

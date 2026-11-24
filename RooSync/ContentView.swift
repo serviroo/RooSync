@@ -218,6 +218,10 @@ private struct AddDeviceView: View {
                     TextField("Device ID or QR code", text: $deviceID, axis: .vertical)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
+                    if store.isLocalDeviceID(deviceID) {
+                        Text("This is this device’s own ID.")
+                            .foregroundStyle(.red)
+                    }
                     TextField("Name", text: $name)
                     TextField("Address (optional)", text: $address)
                         .textInputAutocapitalization(.never)
@@ -246,7 +250,7 @@ private struct AddDeviceView: View {
                             }
                         }
                     }
-                    .disabled(deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isLocalDeviceID(deviceID))
                 }
             }
             .sheet(isPresented: $showingScanner) {

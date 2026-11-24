@@ -211,6 +211,10 @@ final class SyncStore: ObservableObject {
 
     func addDevice(id: String, name: String, address: String? = nil) async throws {
         let normalizedID = normalizeDeviceID(id)
+        try await coreStartupTask.value
+        guard !isLocalDeviceID(normalizedID) else {
+            throw SyncStoreError.localDeviceCannotBeAdded
+        }
         let allowedNetworks = preferences.lanOnly ? Self.lanOnlyNetworks : nil
         try await api.addDevice(id: normalizedID, name: name, address: address, allowedNetworks: allowedNetworks)
         if preferences.lanOnly {
@@ -723,6 +727,7 @@ private enum APIKeyStore {
 private enum SyncStoreError: LocalizedError {
     case coreStartFailed
     case localDeviceCannotBeShared
+    case localDeviceCannotBeAdded
     case folderAccessDenied
     case invalidFolderID
     case invalidFolderName
@@ -732,6 +737,7 @@ private enum SyncStoreError: LocalizedError {
         switch self {
         case .coreStartFailed: "The Syncthing core could not be started."
         case .localDeviceCannotBeShared: "The local RooSync device cannot be selected as a remote peer."
+        case .localDeviceCannotBeAdded: "This is this device’s own ID; it cannot be added as a peer."
         case .folderAccessDenied: "RooSync could not access the selected folder."
         case .invalidFolderID: "Enter a valid folder ID without path separators."
         case .invalidFolderName: "Choose a folder name without path separators."

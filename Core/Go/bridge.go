@@ -14,6 +14,7 @@ import (
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/events"
 	"github.com/syncthing/syncthing/lib/locations"
+	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/svcutil"
 	"github.com/syncthing/syncthing/lib/syncthing"
 	"github.com/thejerf/suture/v4"
@@ -84,6 +85,11 @@ func StartCore(configDir, dataDir, defaultFolder, apiAddress, apiKey string) err
 		c.GUI.RawUseTLS = false
 		c.GUI.User = ""
 		c.GUI.Password = ""
+		for i := range c.Devices {
+			if c.Devices[i].DeviceID == protocol.LocalDeviceID {
+				c.Devices[i].Name = "RooSync"
+			}
+		}
 		c.Options.StartBrowser = false
 		c.Options.URAccepted = 0
 		c.Options.CREnabled = false

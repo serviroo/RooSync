@@ -32,6 +32,28 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testCannotAddLocalDeviceID() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let ownDeviceID = app.staticTexts["device-id"]
+        XCTAssertTrue(ownDeviceID.waitForExistence(timeout: 30))
+        app.buttons["Add"].tap()
+        app.buttons["Add device"].tap()
+
+        let idField = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Device ID or QR code"))
+            .firstMatch
+        XCTAssertTrue(idField.waitForExistence(timeout: 15))
+        idField.tap()
+        idField.typeText(ownDeviceID.label)
+
+        XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
+        let addButton = app.buttons.matching(identifier: "Add").lastMatch
+        XCTAssertFalse(addButton.isEnabled)
+    }
+
+    @MainActor
     func testSetupE2ESyncFolder() {
         let app = XCUIApplication()
         app.launch()
