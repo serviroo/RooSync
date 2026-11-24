@@ -234,7 +234,12 @@ final class RooSyncUITests: XCTestCase {
         openE2EFolder(in: app)
 
         let conflicts = app.staticTexts["Conflicts"]
+        let folderDetails = app.collectionViews.firstMatch
+        for _ in 0..<8 where !conflicts.isHittable {
+            folderDetails.swipeUp()
+        }
         XCTAssertTrue(conflicts.waitForExistence(timeout: 15))
+        guard conflicts.isHittable else { return }
         conflicts.tap()
 
         for _ in 0..<4 {

@@ -10,15 +10,17 @@ REST API.
 
 ## Screenshots
 
-Screenshots from the UI validation handoff will be checked in under
-`docs/screenshots/`. The image slots below can be replaced with the captured
-device setup, folder list, and settings screens once visual review is complete.
+### Folders
 
-<!--
-![Device setup](docs/screenshots/device-setup.png)
-![Folders](docs/screenshots/folders.png)
-![Settings](docs/screenshots/settings.png)
--->
+| Light appearance | Dark appearance |
+| --- | --- |
+| <img src="docs/screenshots/folders.png" alt="RooSync folders screen in light appearance" width="360"> | <img src="docs/screenshots/folders-dark.png" alt="RooSync folders screen in dark appearance" width="360"> |
+
+### Settings
+
+| Light appearance | Dark appearance |
+| --- | --- |
+| <img src="docs/screenshots/settings.png" alt="RooSync settings screen in light appearance" width="360"> | <img src="docs/screenshots/settings-dark.png" alt="RooSync settings screen in dark appearance" width="360"> |
 
 ## What works
 
@@ -79,6 +81,11 @@ or scheduled background synchronization.
   the invocation receives only the runtime iOS grants it.
 - Background App Refresh settings, Low Power Mode, force-quitting RooSync, and
   iOS resource management can prevent or defer background work.
+
+**Shortcut validation gap:** The `Sync now` intent metadata is present, but the
+ad-hoc-signed simulator build used for QA has no Team ID and iOS rejects its
+`AppShortcutsProvider`. A team-signed installation is required to continue
+validation; Shortcut execution on a signed device has not been verified.
 
 Treat background execution as a best-effort refresh, not a replacement for an
 always-on Syncthing peer. Keep another device online when timely delivery

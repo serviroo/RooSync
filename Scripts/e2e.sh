@@ -22,9 +22,56 @@ DOCKER=()
 
 mkdir -p "$E2E_DIR"
 
+capture_failure_diagnostics() {
+	local diagnostics="$E2E_DIR/failure-diagnostics"
+	mkdir -p "$diagnostics"
+	{
+		printf 'run_id=%s\n' "$RUN_ID"
+		printf 'simulator_udid=%s\n' "${SIMULATOR_UDID:-unavailable}"
+		printf 'app_folder_id=%s\n' "$APP_FOLDER_ID"
+		printf 'app_folder_path=%s\n' "${APP_FOLDER:-unavailable}"
+		printf 'peer_container=%s\n' "$CONTAINER_NAME"
+	} >"$diagnostics/summary.log" 2>&1
+
+	if [[ -n "${SIMULATOR_UDID:-}" ]]; then
+		xcrun simctl spawn "$SIMULATOR_UDID" log show --last 10m --style compact \
+			--predicate 'process CONTAINS[c] "RooSync" OR subsystem CONTAINS[c] "com.rooindustries.roosync"' \
+			>"$diagnostics/roosync-simulator.log" 2>&1 || true
+	fi
+
+	if ((${#DOCKER[@]})); then
+		"${DOCKER[@]}" inspect --format '{{json .State}}' "$CONTAINER_NAME" \
+			>"$diagnostics/docker-peer-state.log" 2>&1 || true
+		"${DOCKER[@]}" logs --timestamps --tail 1000 "$CONTAINER_NAME" \
+			>"$diagnostics/docker-peer.log" 2>&1 || true
+	fi
+
+	if declare -F api_request >/dev/null; then
+		if [[ -n "${APP_API_KEY:-}" ]]; then
+			api_request "$APP_REST" "$APP_API_KEY" GET "/rest/db/status?folder=$APP_FOLDER_ID" \
+				>"$diagnostics/app-folder-status.log" 2>&1 || true
+			api_request "$APP_REST" "$APP_API_KEY" GET /rest/system/connections \
+				>"$diagnostics/app-connections.log" 2>&1 || true
+			api_request "$APP_REST" "$APP_API_KEY" GET /rest/system/error \
+				>"$diagnostics/app-system-errors.log" 2>&1 || true
+		fi
+		if [[ -n "${PEER_API_KEY:-}" ]]; then
+			api_request "$PEER_REST" "$PEER_API_KEY" GET "/rest/db/status?folder=$APP_FOLDER_ID" \
+				>"$diagnostics/peer-folder-status.log" 2>&1 || true
+			api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/connections \
+				>"$diagnostics/peer-connections.log" 2>&1 || true
+			api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/error \
+				>"$diagnostics/peer-system-errors.log" 2>&1 || true
+		fi
+	fi
+}
+
 cleanup() {
 	local status=$?
 	trap - EXIT
+	if [[ "$status" -ne 0 ]]; then
+		capture_failure_diagnostics || true
+	fi
 	if [[ -n "$SIMULATOR_UDID" && "$APP_INSTALLED" == 1 ]]; then
 		xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 	fi
@@ -89,7 +136,7 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
 	-derivedDataPath "$DERIVED_DATA" CODE_SIGNING_ALLOWED=NO build-for-testing \
 	>"$E2E_DIR/build.log" 2>&1 || {
-	rg -n 'error:|warning:|BUILD FAILED|TEST BUILD FAILED' "$E2E_DIR/build.log" | tail -80 >&2 || true
+	grep -nE 'error:|warning:|BUILD FAILED|TEST BUILD FAILED' "$E2E_DIR/build.log" | tail -80 >&2 || true
 	fail "Simulator app and UI-test build failed; see $E2E_DIR/build.log."
 }
 
@@ -148,13 +195,17 @@ PY
 
 DESKTOP_FOLDER="$E2E_DIR/desktop-vault"
 mkdir -p "$DESKTOP_FOLDER"
-chmod 777 "$DESKTOP_FOLDER"
+chmod 755 "$DESKTOP_FOLDER"
 cp -R "$ROOT/docs/fixtures/ObsidianVault/.obsidian" "$DESKTOP_FOLDER/"
 cp "$ROOT/docs/fixtures/ObsidianVault/Welcome.md" "$DESKTOP_FOLDER/"
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflicted note.md" "$DESKTOP_FOLDER/"
 
 "${DOCKER[@]}" volume create "$VOLUME_NAME" >/dev/null
+PEER_UID="$(id -u)"
+PEER_GID="$(id -g)"
 "${DOCKER[@]}" run -d --name "$CONTAINER_NAME" --user 0:0 \
+	-e PUID="$PEER_UID" \
+	-e PGID="$PEER_GID" \
 	-e STGUIADDRESS=0.0.0.0:8384 \
 	-v "$VOLUME_NAME:/var/syncthing" \
 	-v "$DESKTOP_FOLDER:/vault:rw" \
@@ -234,7 +285,8 @@ add_folder_config() {
 }
 add_folder_config "$APP_REST" "$APP_API_KEY" "$EXISTING_OFFER_ID" "Existing E2E Offer" "$EXISTING_OFFER_PATH" ""
 add_folder_config "$APP_REST" "$APP_API_KEY" "$UNICODE_EXISTING_ID" "$UNICODE_EXISTING_LABEL" "$UNICODE_EXISTING_PATH" ""
-"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-existing /tmp/roosync-slash /tmp/roosync-empty /tmp/roosync-unicode
+"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" "$CONTAINER_NAME" \
+	mkdir -p /tmp/roosync-existing /tmp/roosync-slash /tmp/roosync-empty /tmp/roosync-unicode
 add_folder_config "$PEER_REST" "$PEER_API_KEY" "$EXISTING_OFFER_ID" "Remote Existing Offer" /tmp/roosync-existing "$APP_ID"
 add_folder_config "$PEER_REST" "$PEER_API_KEY" "$UNICODE_OFFER_ID" "Decomposed Unicode E2E Offer" /tmp/roosync-unicode "$APP_ID"
 add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-slash-label "Incoming/Notes" /tmp/roosync-slash "$APP_ID"
@@ -295,7 +347,8 @@ values["policyPausedFolders"] = [folder_id]
 with open(path, "wb") as preferences_file:
     plistlib.dump(values, preferences_file)
 PY
-	"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-unicode-collision
+	"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" "$CONTAINER_NAME" \
+		mkdir -p /tmp/roosync-unicode-collision
 	add_folder_config "$PEER_REST" "$PEER_API_KEY" "$UNICODE_EXISTING_ID" "Canonical Collision E2E Offer" /tmp/roosync-unicode-collision "$APP_ID"
 	xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 		-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
@@ -304,7 +357,7 @@ PY
 		CODE_SIGNING_ALLOWED=NO test-without-building \
 		-only-testing:RooSyncUITests/RooSyncUITests/testCanonicalEquivalentPendingFolderIDsFailClosed \
 		-resultBundlePath "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" >"$E2E_DIR/pending-folder-collision-test.log" 2>&1 || {
-		rg -n 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/pending-folder-collision-test.log" | tail -80 >&2 || true
+		grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/pending-folder-collision-test.log" | tail -80 >&2 || true
 		fail "Canonical-equivalent pending folder IDs were not rejected; see $E2E_DIR/pending-folder-collision-test.log."
 	}
 	APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)"
@@ -331,7 +384,7 @@ if [[ "${ROOSYNC_E2E_ONLY_PENDING_COLLISION:-0}" == 1 ]]; then
 	for _ in $(seq 1 90); do
 		PENDING_FOLDERS="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/cluster/pending/folders || true)"
 		if python3 -c 'import json,sys; print(str(sys.argv[1] in json.load(sys.stdin)).lower())' "$UNICODE_OFFER_ID" \
-			<<<"$PENDING_FOLDERS" 2>/dev/null | rg -q '^true$'; then
+			<<<"$PENDING_FOLDERS" 2>/dev/null | grep -Eq '^true$'; then
 			PENDING_OFFER_READY=true
 			break
 		fi
@@ -393,7 +446,7 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-only-testing:RooSyncUITests/RooSyncUITests/testResumeE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testConflictCopyCanBeKept \
 	-resultBundlePath "$E2E_DIR/RooSync-E2E.xcresult" >"$E2E_DIR/test.log" 2>&1 || {
-	rg -n 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/test.log" | tail -80 >&2 || true
+	grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/test.log" | tail -80 >&2 || true
 	fail "Simulator UI E2E failed; see $E2E_DIR/test.log."
 }
 
@@ -451,7 +504,7 @@ grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Conflicted note (conf
 grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Extensionless conflict (conflict copy)" || fail "The kept extensionless conflict copy has unexpected contents."
 grep -Fxq "$LEGACY_MARKDOWN_CONTENT" "$APP_FOLDER/Legacy note (conflict copy).md" || fail "The kept legacy Markdown conflict copy has unexpected contents."
 grep -Fxq "$LEGACY_EXTENSIONLESS_CONTENT" "$APP_FOLDER/Legacy extensionless (conflict copy)" || fail "The kept legacy extensionless conflict copy has unexpected contents."
-if find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit | rg -q .; then
+if find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit | grep -q .; then
 	fail "A conflict file remained after choosing Keep copy."
 fi
 [[ -f "$APP_FOLDER/Welcome.md" && -f "$DESKTOP_FOLDER/From iPhone.md" ]] || fail "A two-way synced note is missing after conflict handling."

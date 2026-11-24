@@ -539,7 +539,22 @@ private struct ConflictListView: View {
     var body: some View {
         List {
             if conflicts.isEmpty {
-                ContentUnavailableView("No conflicts", systemImage: "checkmark.circle", description: Text("Syncthing conflict copies will appear here."))
+                VStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
+                    Text("No conflicts")
+                        .font(.title2.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Syncthing conflict copies will appear here.")
+                        .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 24)
             }
             ForEach(conflicts) { conflict in
                 VStack(alignment: .leading, spacing: 8) {
