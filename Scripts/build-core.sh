@@ -32,7 +32,7 @@ cp "$ROOT/Core/Go/bridge.go" "$SOURCE_DIR/lib/roosyncmobile/bridge.go"
 	go test ./lib/roosyncmobile
 	go mod edit -require="golang.org/x/mobile@$GOMOBILE_VERSION"
 	go mod download golang.org/x/mobile
-	gomobile bind -target=ios,iossimulator -iosversion=18.0 \
+	gomobile bind -trimpath -target=ios,iossimulator -iosversion=18.0 \
 		-bundleid=com.rooindustries.roosync.core \
 		-o "$FRAMEWORK" github.com/syncthing/syncthing/lib/roosyncmobile
 )
