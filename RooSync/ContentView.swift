@@ -217,6 +217,7 @@ private struct AddDeviceView: View {
             Form {
                 Section("Device") {
                     TextField("Device ID or QR code", text: $deviceID, axis: .vertical)
+                        .accessibilityIdentifier("device-id-entry")
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                     if store.isLocalDeviceID(deviceID) {

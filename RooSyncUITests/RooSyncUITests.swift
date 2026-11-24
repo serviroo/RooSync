@@ -41,9 +41,7 @@ final class RooSyncUITests: XCTestCase {
         app.buttons["Add"].tap()
         app.buttons["Add device"].tap()
 
-        let idField = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Device ID or QR code"))
-            .firstMatch
+        let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
         XCTAssertTrue(idField.waitForExistence(timeout: 15))
         idField.tap()
         idField.typeText(ownDeviceID.label)
@@ -98,13 +96,13 @@ final class RooSyncUITests: XCTestCase {
         let onMyIPhone = app.staticTexts["On My iPhone"]
         XCTAssertTrue(onMyIPhone.waitForExistence(timeout: 15))
         onMyIPhone.tap()
-        let appFolder = app.staticTexts["RooSync"]
+        let appFolder = app.cells.matching(identifier: "RooSync, Container").firstMatch
         XCTAssertTrue(appFolder.waitForExistence(timeout: 15))
         appFolder.tap()
-        let vaults = app.staticTexts["Vaults"]
+        let vaults = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Vaults")).firstMatch
         XCTAssertTrue(vaults.waitForExistence(timeout: 15))
         vaults.tap()
-        let candidate = app.staticTexts["RooSync E2E Vault"]
+        let candidate = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault")).firstMatch
         XCTAssertTrue(candidate.waitForExistence(timeout: 15))
         candidate.tap()
         app.buttons["Open"].tap()
