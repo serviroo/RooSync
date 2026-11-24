@@ -79,9 +79,23 @@ final class RooSyncUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         let message = "The peer has folder IDs that differ only by Unicode normalization, so RooSync cannot safely display these offers."
-        XCTAssertTrue(app.alerts.staticTexts[message].waitForExistence(timeout: 30))
+        let warning = app.staticTexts["pending-folder-warning"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 30))
+        XCTAssertEqual(warning.label, message)
         let pendingFolderAccepts = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "accept-folder-"))
         XCTAssertEqual(pendingFolderAccepts.count, 0)
+
+        let configuredFolder = app.staticTexts["RooSync E2E Vault"]
+        XCTAssertTrue(configuredFolder.waitForExistence(timeout: 30))
+        configuredFolder.tap()
+        let refreshedStatus = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "State, ")
+        ).firstMatch
+        XCTAssertTrue(refreshedStatus.waitForExistence(timeout: 30))
+        XCTAssertTrue(["Up to date", "Syncing", "Error", "Stopped"].contains {
+            refreshedStatus.label.hasSuffix($0)
+        })
+        XCTAssertTrue(app.buttons["Pause syncing"].waitForExistence(timeout: 15))
     }
 
     @MainActor

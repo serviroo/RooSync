@@ -276,6 +276,73 @@ wait_for_file() {
 	fail "Timed out waiting for $description at $path."
 }
 
+run_pending_folder_collision_test() {
+	set_folder_paused "$APP_REST" "$APP_API_KEY" true
+	xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+	python3 - "$APP_DATA/Library/Preferences/com.rooindustries.roosync.plist" "$APP_FOLDER_ID" <<'PY'
+import os
+import plistlib
+import sys
+
+path, folder_id = sys.argv[1:]
+values = {}
+if os.path.exists(path):
+    with open(path, "rb") as preferences_file:
+        values = plistlib.load(preferences_file)
+values["pauseOnBattery"] = False
+values["pauseOnCellular"] = False
+values["policyPausedFolders"] = [folder_id]
+with open(path, "wb") as preferences_file:
+    plistlib.dump(values, preferences_file)
+PY
+	"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-unicode-collision
+	add_folder_config "$PEER_REST" "$PEER_API_KEY" "$UNICODE_EXISTING_ID" "Canonical Collision E2E Offer" /tmp/roosync-unicode-collision "$APP_ID"
+	xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+		-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+		-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+		-maximum-concurrent-test-simulator-destinations 1 \
+		CODE_SIGNING_ALLOWED=NO test-without-building \
+		-only-testing:RooSyncUITests/RooSyncUITests/testCanonicalEquivalentPendingFolderIDsFailClosed \
+		-resultBundlePath "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" >"$E2E_DIR/pending-folder-collision-test.log" 2>&1 || {
+		rg -n 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/pending-folder-collision-test.log" | tail -80 >&2 || true
+		fail "Canonical-equivalent pending folder IDs were not rejected; see $E2E_DIR/pending-folder-collision-test.log."
+	}
+	APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)"
+	APP_CONFIG="$APP_DATA/Library/Application Support/RooSync/config/config.xml"
+	python3 - "$APP_CONFIG" "$APP_DATA/Library/Preferences/com.rooindustries.roosync.plist" "$APP_FOLDER_ID" <<'PY' || fail "A pending-folder collision prevented configured-folder power policy reconciliation."
+import plistlib
+import sys
+import xml.etree.ElementTree as ET
+
+config_path, preferences_path, folder_id = sys.argv[1:]
+folder = next(
+    (node for node in ET.parse(config_path).getroot().findall("folder") if node.get("id") == folder_id),
+    None,
+)
+assert folder is not None and folder.get("paused", "false").lower() == "false"
+with open(preferences_path, "rb") as preferences_file:
+    preferences = plistlib.load(preferences_file)
+assert folder_id not in preferences.get("policyPausedFolders", [])
+PY
+}
+
+if [[ "${ROOSYNC_E2E_ONLY_PENDING_COLLISION:-0}" == 1 ]]; then
+	PENDING_OFFER_READY=false
+	for _ in $(seq 1 90); do
+		PENDING_FOLDERS="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/cluster/pending/folders || true)"
+		if python3 -c 'import json,sys; print(str(sys.argv[1] in json.load(sys.stdin)).lower())' "$UNICODE_OFFER_ID" \
+			<<<"$PENDING_FOLDERS" 2>/dev/null | rg -q '^true$'; then
+			PENDING_OFFER_READY=true
+			break
+		fi
+		sleep 1
+	done
+	[[ "$PENDING_OFFER_READY" == true ]] || fail "The first Unicode-equivalent pending offer did not reach the simulator."
+	run_pending_folder_collision_test
+	printf '%s\n' 'PASS: pending-ID collisions fail closed while configured status and policy refresh.'
+	exit 0
+fi
+
 wait_for_file "$APP_FOLDER/Welcome.md" "Docker-to-simulator note"
 wait_for_file "$DESKTOP_FOLDER/From iPhone.md" "simulator-to-Docker note"
 wait_for_file "$DESKTOP_FOLDER/Extensionless conflict" "extensionless conflict fixture on Docker"
@@ -402,18 +469,7 @@ for _ in $(seq 1 90); do
 done
 [[ -z "$APP_CONFLICT" && -z "$PEER_CONFLICT" ]] || fail "The conflict reappeared after the Docker peer resumed."
 
-"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-unicode-collision
-add_folder_config "$PEER_REST" "$PEER_API_KEY" "$UNICODE_EXISTING_ID" "Canonical Collision E2E Offer" /tmp/roosync-unicode-collision "$APP_ID"
-xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
-	-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-	-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
-	-maximum-concurrent-test-simulator-destinations 1 \
-	CODE_SIGNING_ALLOWED=NO test-without-building \
-	-only-testing:RooSyncUITests/RooSyncUITests/testCanonicalEquivalentPendingFolderIDsFailClosed \
-	-resultBundlePath "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" >"$E2E_DIR/pending-folder-collision-test.log" 2>&1 || {
-	rg -n 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/pending-folder-collision-test.log" | tail -80 >&2 || true
-	fail "Canonical-equivalent pending folder IDs were not rejected; see $E2E_DIR/pending-folder-collision-test.log."
-}
+run_pending_folder_collision_test
 
 printf '%s\n' \
 	'PASS: embedded iOS Syncthing core paired with Docker Syncthing.' \
@@ -422,7 +478,7 @@ printf '%s\n' \
 	'PASS: empty and slash-containing folder labels were accepted with safe paths.' \
 	'PASS: duplicate external folder IDs were rejected without overwriting config.' \
 	'PASS: canonical-equivalent folder offers did not share unrelated configuration.' \
-	'PASS: canonical-equivalent pending IDs fail closed before folder identity can collapse.' \
+	'PASS: pending-ID collisions fail closed while configured status and policy refresh.' \
 	'PASS: sample Obsidian vault synced in both directions.' \
 	'PASS: concurrent edits created a Syncthing conflict copy.' \
 	'PASS: app Keep copy preserved the conflict and removed its conflict suffix.' \

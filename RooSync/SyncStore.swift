@@ -31,6 +31,7 @@ final class SyncStore: ObservableObject {
     @Published private(set) var statuses: [String: FolderStatus] = [:]
     @Published private(set) var pendingDevices: [PendingDevice] = []
     @Published private(set) var pendingFolders: [PendingFolder] = []
+    @Published private(set) var pendingFolderWarning: String?
     @Published private(set) var foldersNeedingReauthorization = Set<String>()
     @Published private(set) var errorMessage: String?
     @Published private(set) var isCellular = false
@@ -120,7 +121,12 @@ final class SyncStore: ObservableObject {
             devices = try await api.devices().filter { !isLocalDeviceID($0.deviceID) }
             pendingDevices = try await api.pendingDevices()
             pendingFolders = []
-            pendingFolders = try await api.pendingFolders()
+            pendingFolderWarning = nil
+            do {
+                pendingFolders = try await api.pendingFolders()
+            } catch {
+                pendingFolderWarning = error.localizedDescription
+            }
             for folder in folders {
                 if let status = try? await api.folderStatus(folder.id) {
                     statuses[folder.id] = status

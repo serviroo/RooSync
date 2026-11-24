@@ -43,8 +43,14 @@ private struct FolderListView: View {
                 Section("This device") {
                     DeviceIdentityView(deviceID: store.deviceID)
                 }
-                if !store.pendingDevices.isEmpty || !store.pendingFolders.isEmpty {
+                if store.pendingFolderWarning != nil || !store.pendingDevices.isEmpty || !store.pendingFolders.isEmpty {
                     Section("Pending shares") {
+                        if let warning = store.pendingFolderWarning {
+                            Text(warning)
+                                .font(.footnote)
+                                .foregroundStyle(.orange)
+                                .accessibilityIdentifier("pending-folder-warning")
+                        }
                         ForEach(store.pendingDevices) { device in
                             HStack {
                                 VStack(alignment: .leading) {
