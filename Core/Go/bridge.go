@@ -5,6 +5,8 @@ package roosyncmobile
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -74,6 +76,11 @@ func StartCore(configDir, dataDir, defaultFolder, apiAddress, apiKey string) err
 		return err
 	}
 	log.Print("RooSync core: stage=config-loaded")
+	guiUser, guiPasswordHash, err := newUnexposedGUICredentials()
+	if err != nil {
+		cancel()
+		return err
+	}
 	early.Add(cfg)
 	log.Print("RooSync core: stage=config-service-added")
 
@@ -83,8 +90,10 @@ func StartCore(configDir, dataDir, defaultFolder, apiAddress, apiKey string) err
 		c.GUI.RawAddress = apiAddress
 		c.GUI.APIKey = apiKey
 		c.GUI.RawUseTLS = false
-		c.GUI.User = ""
-		c.GUI.Password = ""
+		if !c.GUI.IsAuthEnabled() {
+			c.GUI.User = guiUser
+			c.GUI.Password = guiPasswordHash
+		}
 		for i := range c.Devices {
 			if c.Devices[i].DeviceID == protocol.LocalDeviceID {
 				c.Devices[i].Name = "RooSync"
@@ -127,6 +136,20 @@ func StartCore(configDir, dataDir, defaultFolder, apiAddress, apiKey string) err
 	log.Print("RooSync core: stage=api-ready")
 	current = &session{app: app, cancel: cancel}
 	return nil
+}
+
+func newUnexposedGUICredentials() (string, string, error) {
+	var random [32]byte
+	if _, err := cryptorand.Read(random[:]); err != nil {
+		return "", "", err
+	}
+	username := "roosync-" + hex.EncodeToString(random[:8])
+	password := hex.EncodeToString(random[8:])
+	gui := config.GUIConfiguration{}
+	if err := gui.SetPassword(password); err != nil {
+		return "", "", err
+	}
+	return username, gui.Password, nil
 }
 
 // StopCore stops the embedded Syncthing core and releases its database.

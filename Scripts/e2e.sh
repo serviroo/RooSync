@@ -134,6 +134,17 @@ PY
 	sleep 1
 done
 [[ -n "$APP_ID" ]] || fail "The simulator REST API key was not persisted and accepted within 30 seconds."
+GUI_AUTH_CONFIGURED="$(python3 - "$APP_CONFIG" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+gui = ET.parse(sys.argv[1]).getroot().find("./gui")
+user = gui.findtext("user", "") if gui is not None else ""
+password = gui.findtext("password", "") if gui is not None else ""
+print(str(bool(user) and password.startswith(("$2a$", "$2b$", "$2y$"))).lower())
+PY
+)"
+[[ "$GUI_AUTH_CONFIGURED" == true ]] || fail "The embedded GUI does not have a nonempty user and bcrypt password hash."
 
 DESKTOP_FOLDER="$E2E_DIR/desktop-vault"
 mkdir -p "$DESKTOP_FOLDER"
@@ -205,6 +216,22 @@ add_folder() {
 
 add_folder "$APP_REST" "$APP_API_KEY" "$APP_FOLDER" "$PEER_ID" false
 add_folder "$PEER_REST" "$PEER_API_KEY" /vault "$APP_ID" true
+
+CSRF_PROBE_DIR="$E2E_DIR/csrf-probe"
+mkdir -p "$CSRF_PROBE_DIR"
+curl --noproxy '*' -sS -o /dev/null -D "$CSRF_PROBE_DIR/root.headers" \
+	-c "$CSRF_PROBE_DIR/cookies" "$APP_REST/" || fail "The unauthenticated GUI root probe failed."
+CSRF_COOKIE_NAME="$(awk '$6 ~ /^CSRF-Token-/ {print $6}' "$CSRF_PROBE_DIR/cookies" | tail -1)"
+CSRF_COOKIE_VALUE="$(awk -v name="$CSRF_COOKIE_NAME" '$6==name {print $7}' "$CSRF_PROBE_DIR/cookies" | tail -1)"
+CSRF_HEADERS=()
+if [[ -n "$CSRF_COOKIE_NAME" && -n "$CSRF_COOKIE_VALUE" ]]; then
+	CSRF_HEADERS=(-H "X-$CSRF_COOKIE_NAME: $CSRF_COOKIE_VALUE")
+fi
+CSRF_REST_STATUS="$(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' \
+	-b "$CSRF_PROBE_DIR/cookies" "${CSRF_HEADERS[@]}" -X POST \
+	"$APP_REST/rest/db/scan?folder=$APP_FOLDER_ID" || true)"
+[[ "$CSRF_REST_STATUS" == 401 || "$CSRF_REST_STATUS" == 403 ]] || \
+	fail "An unauthenticated root-cookie/CSRF request reached REST (HTTP $CSRF_REST_STATUS)."
 PEER_IGNORE_PERMS="$(api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/config/folders | python3 -c 'import json,sys; folder_id=sys.argv[1]; folders=json.load(sys.stdin); folder=next((item for item in folders if item.get("id")==folder_id), None); print(str(bool(folder.get("ignorePerms"))).lower() if folder else "")' "$APP_FOLDER_ID")"
 [[ "$PEER_IGNORE_PERMS" == true ]] || fail "Docker peer folder did not enable ignorePerms for its host-mounted vault."
 
@@ -317,6 +344,7 @@ done
 
 printf '%s\n' \
 	'PASS: embedded iOS Syncthing core paired with Docker Syncthing.' \
+	'PASS: unauthenticated root-cookie/CSRF requests were denied.' \
 	'PASS: sample Obsidian vault synced in both directions.' \
 	'PASS: concurrent edits created a Syncthing conflict copy.' \
 	'PASS: app Keep copy preserved the conflict and removed its conflict suffix.' \
