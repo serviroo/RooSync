@@ -172,13 +172,122 @@ final class SyncthingAPI {
     }
 
     func pendingFolders() async throws -> [PendingFolder] {
-        let value = try await json("/rest/cluster/pending/folders") as? [String: [String: Any]] ?? [:]
+        let data = try await request("/rest/cluster/pending/folders")
+        let folderIDs = try topLevelObjectKeys(in: data)
+        guard !hasCanonicalFolderIDCollision(folderIDs) else {
+            throw APIError.canonicalFolderIDCollision
+        }
+        let value = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: [String: Any]] ?? [:]
         return value.flatMap { folderID, info in
             let offers = info["offeredBy"] as? [String: [String: Any]] ?? [:]
             return offers.map { deviceID, offer in
                 PendingFolder(id: folderID, name: offer["label"] as? String ?? folderID, deviceID: deviceID)
             }
         }
+    }
+
+    private func topLevelObjectKeys(in data: Data) throws -> [String] {
+        let bytes = Array(data)
+        var index = 0
+
+        func skipWhitespace() {
+            while index < bytes.count && [0x20, 0x09, 0x0A, 0x0D].contains(bytes[index]) {
+                index += 1
+            }
+        }
+
+        func parseString() throws -> String {
+            guard index < bytes.count, bytes[index] == 0x22 else { throw APIError.invalidResponse }
+            let start = index
+            index += 1
+            var escaped = false
+            while index < bytes.count {
+                let byte = bytes[index]
+                index += 1
+                if escaped {
+                    escaped = false
+                } else if byte == 0x5C {
+                    escaped = true
+                } else if byte == 0x22 {
+                    return try JSONDecoder().decode(String.self, from: Data(bytes[start..<index]))
+                }
+            }
+            throw APIError.invalidResponse
+        }
+
+        func skipValue() throws {
+            skipWhitespace()
+            guard index < bytes.count else { throw APIError.invalidResponse }
+            if bytes[index] == 0x22 {
+                _ = try parseString()
+                return
+            }
+
+            var depth = 0
+            var insideString = false
+            var escaped = false
+            while index < bytes.count {
+                let byte = bytes[index]
+                if insideString {
+                    if escaped {
+                        escaped = false
+                    } else if byte == 0x5C {
+                        escaped = true
+                    } else if byte == 0x22 {
+                        insideString = false
+                    }
+                } else if byte == 0x22 {
+                    insideString = true
+                } else if byte == 0x7B || byte == 0x5B {
+                    depth += 1
+                } else if byte == 0x7D || byte == 0x5D {
+                    if depth == 0 { return }
+                    depth -= 1
+                    index += 1
+                    if depth == 0 { return }
+                    continue
+                } else if byte == 0x2C && depth == 0 {
+                    return
+                }
+                index += 1
+            }
+        }
+
+        skipWhitespace()
+        guard index < bytes.count, bytes[index] == 0x7B else { throw APIError.invalidResponse }
+        index += 1
+        var keys: [String] = []
+        while true {
+            skipWhitespace()
+            guard index < bytes.count else { throw APIError.invalidResponse }
+            if bytes[index] == 0x7D {
+                return keys
+            }
+            keys.append(try parseString())
+            skipWhitespace()
+            guard index < bytes.count, bytes[index] == 0x3A else { throw APIError.invalidResponse }
+            index += 1
+            try skipValue()
+            skipWhitespace()
+            guard index < bytes.count else { throw APIError.invalidResponse }
+            if bytes[index] == 0x2C {
+                index += 1
+            } else if bytes[index] == 0x7D {
+                return keys
+            } else {
+                throw APIError.invalidResponse
+            }
+        }
+    }
+
+    private func hasCanonicalFolderIDCollision(_ folderIDs: [String]) -> Bool {
+        var normalizedIDs = Set<String>()
+        for folderID in folderIDs {
+            if !normalizedIDs.insert(folderID.precomposedStringWithCanonicalMapping).inserted {
+                return true
+            }
+        }
+        return false
     }
 
     func options() async throws -> [String: Any] {
@@ -251,6 +360,7 @@ final class SyncthingAPI {
 enum APIError: LocalizedError {
     case invalidURL
     case invalidResponse
+    case canonicalFolderIDCollision
     case server(String)
     case folderHasErrors(String)
 
@@ -258,6 +368,7 @@ enum APIError: LocalizedError {
         switch self {
         case .invalidURL: "The Syncthing API URL is invalid."
         case .invalidResponse: "Syncthing returned an unexpected response."
+        case .canonicalFolderIDCollision: "The peer has folder IDs that differ only by Unicode normalization, so RooSync cannot safely display these offers."
         case let .server(message): message
         case let .folderHasErrors(folderID): "Syncthing reported pull errors for folder \(folderID)."
         }

@@ -112,13 +112,14 @@ final class SyncStore: ObservableObject {
         do {
             try await coreStartupTask.value
             deviceID = try await api.status()
-            folders = try await api.folders()
+            folders = try await loadConfiguredFolders()
             await restoreBookmarksIfNeeded()
             try await reconcileAppDocumentsFolderPaths()
-            folders = try await api.folders()
+            folders = try await loadConfiguredFolders()
             foldersLoaded = true
             devices = try await api.devices().filter { !isLocalDeviceID($0.deviceID) }
             pendingDevices = try await api.pendingDevices()
+            pendingFolders = []
             pendingFolders = try await api.pendingFolders()
             for folder in folders {
                 if let status = try? await api.folderStatus(folder.id) {
@@ -144,15 +145,15 @@ final class SyncStore: ObservableObject {
         do {
             try await coreStartupTask.value
             try await waitForCore(until: min(deadline, clock.now.advanced(by: .seconds(5))))
-            folders = try await api.folders()
+            folders = try await loadConfiguredFolders()
             await restoreBookmarksIfNeeded()
             try await reconcileAppDocumentsFolderPaths()
-            folders = try await api.folders()
+            folders = try await loadConfiguredFolders()
             foldersLoaded = true
             await loadNetworkPreferences()
             try await applyLANRestriction(preferences.lanOnly)
             await applyPowerPolicy()
-            folders = try await api.folders()
+            folders = try await loadConfiguredFolders()
             for folder in folders where !folder.paused {
                 try await api.scan(folder.id)
             }
@@ -331,14 +332,16 @@ final class SyncStore: ObservableObject {
             guard !isLocalDeviceID(folder.deviceID) else {
                 throw SyncStoreError.localDeviceCannotBeShared
             }
-            let configuredFolders = try await api.folders()
-            if let existing = configuredFolders.first(where: { $0.id == folder.id }) {
+            let configuredFolders = try await loadConfiguredFolders()
+            if let existing = configuredFolders.first(where: { folderIDsMatchExactly($0.id, folder.id) }) {
                 var deviceIDs = existing.devices.map(\.deviceID)
                 if !deviceIDs.contains(folder.deviceID) {
                     deviceIDs.append(folder.deviceID)
                 }
                 try await api.setFolderSharing(existing.id, deviceIDs: Array(Set(deviceIDs)))
                 await refresh()
+            } else if configuredFolders.contains(where: { $0.id == folder.id }) {
+                throw SyncStoreError.canonicalFolderIDCollision
             } else {
                 try await addFolder(id: folder.id, name: folder.name, sharedWith: [folder.deviceID])
             }
@@ -474,7 +477,7 @@ final class SyncStore: ObservableObject {
         let currentFolderIDs = Set(folders.map(\.id))
         policyPausedFolders.formIntersection(currentFolderIDs)
         savePolicyPausedFolders()
-        if changed, let updatedFolders = try? await api.folders() {
+        if changed, let updatedFolders = try? await loadConfiguredFolders() {
             folders = updatedFolders
         }
     }
@@ -675,10 +678,41 @@ final class SyncStore: ObservableObject {
 
     private func ensureFolderIDAvailable(_ folderID: String) async throws {
         try await coreStartupTask.value
-        let existingFolders = try await api.folders()
-        guard !existingFolders.contains(where: { $0.id == folderID }) else {
+        let existingFolders = try await loadConfiguredFolders()
+        guard !existingFolders.contains(where: { folderIDsMatchExactly($0.id, folderID) }) else {
             throw SyncStoreError.folderAlreadyExists
         }
+        guard !existingFolders.contains(where: { $0.id == folderID }) else {
+            throw SyncStoreError.canonicalFolderIDCollision
+        }
+    }
+
+    private func loadConfiguredFolders() async throws -> [SyncthingFolder] {
+        let loadedFolders = try await api.folders()
+        guard !hasCanonicalFolderIDCollision(loadedFolders.map(\.id)) else {
+            folders = []
+            statuses = [:]
+            pendingFolders = []
+            foldersLoaded = false
+            let error = SyncStoreError.canonicalFolderIDCollision
+            errorMessage = error.localizedDescription
+            throw error
+        }
+        return loadedFolders
+    }
+
+    private func hasCanonicalFolderIDCollision(_ folderIDs: [String]) -> Bool {
+        var normalizedIDs = Set<String>()
+        for folderID in folderIDs {
+            if !normalizedIDs.insert(folderID.precomposedStringWithCanonicalMapping).inserted {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func folderIDsMatchExactly(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.elementsEqual(rhs.utf8)
     }
 
     private func normalizedFolderID(_ value: String) throws -> String {
@@ -786,6 +820,7 @@ private enum SyncStoreError: LocalizedError {
     case coreStartFailed
     case localDeviceCannotBeShared
     case localDeviceCannotBeAdded
+    case canonicalFolderIDCollision
     case folderAccessDenied
     case invalidFolderID
     case invalidFolderName
@@ -797,6 +832,7 @@ private enum SyncStoreError: LocalizedError {
         case .coreStartFailed: "The Syncthing core could not be started."
         case .localDeviceCannotBeShared: "The local RooSync device cannot be selected as a remote peer."
         case .localDeviceCannotBeAdded: "This is this device’s own ID; it cannot be added as a peer."
+        case .canonicalFolderIDCollision: "A folder ID differs only by Unicode normalization; RooSync stopped to avoid sharing the wrong folder."
         case .folderAccessDenied: "RooSync could not access the selected folder."
         case .invalidFolderID: "Enter a valid folder ID without path separators."
         case .invalidFolderName: "Choose a folder name without path separators."

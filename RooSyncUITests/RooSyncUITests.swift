@@ -62,6 +62,29 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testCanonicalEquivalentFolderOfferDoesNotShareExistingFolder() {
+        let app = XCUIApplication()
+        app.launch()
+        let decomposedID = "cafe\u{0301}-e2e"
+        let accept = app.buttons["accept-folder-\(decomposedID)"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 60))
+        accept.tap()
+        XCTAssertTrue(app.alerts.staticTexts["A folder ID differs only by Unicode normalization; RooSync stopped to avoid sharing the wrong folder."].waitForExistence(timeout: 10))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertTrue(accept.waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    func testCanonicalEquivalentPendingFolderIDsFailClosed() {
+        let app = XCUIApplication()
+        app.launch()
+        let message = "The peer has folder IDs that differ only by Unicode normalization, so RooSync cannot safely display these offers."
+        XCTAssertTrue(app.alerts.staticTexts[message].waitForExistence(timeout: 30))
+        let pendingFolderAccepts = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "accept-folder-"))
+        XCTAssertEqual(pendingFolderAccepts.count, 0)
+    }
+
+    @MainActor
     func testAcceptingUnsafeFolderLabelsUsesSafePaths() {
         let app = XCUIApplication()
         app.launch()

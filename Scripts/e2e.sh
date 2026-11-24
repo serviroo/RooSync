@@ -220,7 +220,12 @@ add_folder "$PEER_REST" "$PEER_API_KEY" /vault "$APP_ID" true
 
 EXISTING_OFFER_ID="roosync-e2e-existing-offer"
 EXISTING_OFFER_PATH="$APP_DATA/Documents/Vaults/Existing E2E Offer"
+UNICODE_EXISTING_ID="$(python3 -c 'print("caf\u00e9-e2e")')"
+UNICODE_OFFER_ID="$(python3 -c 'print("cafe\u0301-e2e")')"
+UNICODE_EXISTING_LABEL="Composed Unicode E2E Folder"
+UNICODE_EXISTING_PATH="$APP_DATA/Documents/Vaults/$UNICODE_EXISTING_LABEL"
 mkdir -p "$EXISTING_OFFER_PATH"
+mkdir -p "$UNICODE_EXISTING_PATH"
 add_folder_config() {
 	local base=$1 key=$2 folder_id=$3 label=$4 path=$5 device=$6 defaults body
 	defaults="$(api_request "$base" "$key" GET /rest/config/defaults/folder)"
@@ -228,8 +233,10 @@ add_folder_config() {
 	api_request "$base" "$key" POST /rest/config/folders "$body" >/dev/null
 }
 add_folder_config "$APP_REST" "$APP_API_KEY" "$EXISTING_OFFER_ID" "Existing E2E Offer" "$EXISTING_OFFER_PATH" ""
-"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-existing /tmp/roosync-slash /tmp/roosync-empty
+add_folder_config "$APP_REST" "$APP_API_KEY" "$UNICODE_EXISTING_ID" "$UNICODE_EXISTING_LABEL" "$UNICODE_EXISTING_PATH" ""
+"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-existing /tmp/roosync-slash /tmp/roosync-empty /tmp/roosync-unicode
 add_folder_config "$PEER_REST" "$PEER_API_KEY" "$EXISTING_OFFER_ID" "Remote Existing Offer" /tmp/roosync-existing "$APP_ID"
+add_folder_config "$PEER_REST" "$PEER_API_KEY" "$UNICODE_OFFER_ID" "Decomposed Unicode E2E Offer" /tmp/roosync-unicode "$APP_ID"
 add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-slash-label "Incoming/Notes" /tmp/roosync-slash "$APP_ID"
 add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-empty-label "" /tmp/roosync-empty "$APP_ID"
 
@@ -307,6 +314,7 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
 	-only-testing:RooSyncUITests/RooSyncUITests/testEmbeddedRESTRejectsRequestsWithoutAPIKey \
 	-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingOfferForExistingFolderSharesWithoutReplacingIt \
+	-only-testing:RooSyncUITests/RooSyncUITests/testCanonicalEquivalentFolderOfferDoesNotShareExistingFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingUnsafeFolderLabelsUsesSafePaths \
 	-only-testing:RooSyncUITests/RooSyncUITests/testDuplicateExternalFolderIDIsRejected \
 	-only-testing:RooSyncUITests/RooSyncUITests/testPauseE2ESyncFolder \
@@ -318,6 +326,7 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 }
 
 APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)"
+UNICODE_EXISTING_PATH="$APP_DATA/Documents/Vaults/$UNICODE_EXISTING_LABEL"
 APP_CONFIG="$APP_DATA/Library/Application Support/RooSync/config/config.xml"
 APP_API_KEY=""
 APP_FOLDER=""
@@ -350,6 +359,22 @@ python3 -c 'import json,sys; folders=json.loads(sys.argv[1]); by_id={f["id"]:f f
 	"$E2E_FOLDERS" "$APP_FOLDER_ID" "$APP_FOLDER_LABEL" "$APP_FOLDER" "$PEER_ID" "$EXISTING_OFFER_ID" "$APP_DATA/Documents/Vaults/Existing E2E Offer" "$APP_DATA/Documents/Vaults" || \
 	fail "Folder-offer acceptance or duplicate-ID rejection changed preserved config or created unsafe paths."
 
+python3 - "$E2E_FOLDERS" "$UNICODE_EXISTING_ID" "$UNICODE_OFFER_ID" "$UNICODE_EXISTING_LABEL" "$UNICODE_EXISTING_PATH" "$PEER_ID" <<'PY' || fail "A Unicode-equivalent incoming ID shared or replaced the existing folder."
+import json
+import sys
+import unicodedata
+
+folders = json.loads(sys.argv[1])
+existing_id, offered_id, label, path, peer_id = sys.argv[2:]
+assert existing_id != offered_id
+assert existing_id.encode() != offered_id.encode()
+assert unicodedata.normalize("NFC", existing_id) == unicodedata.normalize("NFC", offered_id)
+existing = next((folder for folder in folders if folder["id"] == existing_id), None)
+assert existing is not None and existing.get("label") == label and existing.get("path") == path
+assert not any(device.get("deviceID") == peer_id for device in existing.get("devices", []))
+assert not any(folder["id"] == offered_id for folder in folders)
+PY
+
 grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Conflicted note (conflict copy).md" || fail "The kept Markdown conflict copy has unexpected contents."
 grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Extensionless conflict (conflict copy)" || fail "The kept extensionless conflict copy has unexpected contents."
 if find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit | rg -q .; then
@@ -368,12 +393,27 @@ for _ in $(seq 1 90); do
 done
 [[ -z "$APP_CONFLICT" && -z "$PEER_CONFLICT" ]] || fail "The conflict reappeared after the Docker peer resumed."
 
+"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-unicode-collision
+add_folder_config "$PEER_REST" "$PEER_API_KEY" "$UNICODE_EXISTING_ID" "Canonical Collision E2E Offer" /tmp/roosync-unicode-collision "$APP_ID"
+xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+	-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+	-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+	-maximum-concurrent-test-simulator-destinations 1 \
+	CODE_SIGNING_ALLOWED=NO test-without-building \
+	-only-testing:RooSyncUITests/RooSyncUITests/testCanonicalEquivalentPendingFolderIDsFailClosed \
+	-resultBundlePath "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" >"$E2E_DIR/pending-folder-collision-test.log" 2>&1 || {
+	rg -n 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/pending-folder-collision-test.log" | tail -80 >&2 || true
+	fail "Canonical-equivalent pending folder IDs were not rejected; see $E2E_DIR/pending-folder-collision-test.log."
+}
+
 printf '%s\n' \
 	'PASS: embedded iOS Syncthing core paired with Docker Syncthing.' \
 	'PASS: unauthenticated root-cookie/CSRF requests were denied.' \
 	'PASS: existing folder offers were accepted without replacing configuration.' \
 	'PASS: empty and slash-containing folder labels were accepted with safe paths.' \
 	'PASS: duplicate external folder IDs were rejected without overwriting config.' \
+	'PASS: canonical-equivalent folder offers did not share unrelated configuration.' \
+	'PASS: canonical-equivalent pending IDs fail closed before folder identity can collapse.' \
 	'PASS: sample Obsidian vault synced in both directions.' \
 	'PASS: concurrent edits created a Syncthing conflict copy.' \
 	'PASS: app Keep copy preserved the conflict and removed its conflict suffix.' \
