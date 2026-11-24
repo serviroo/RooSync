@@ -59,5 +59,6 @@ jobs:
             .build/e2e/**/*.log
             .build/e2e/**/*.xcresult
             .build/third-party-licenses-v2.1.7/**
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

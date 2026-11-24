@@ -64,6 +64,26 @@ capture_failure_diagnostics() {
 				>"$diagnostics/peer-system-errors.log" 2>&1 || true
 		fi
 	fi
+
+	printf '\nE2E failure diagnostics (API keys and config XML omitted):\n' >&2
+	for name in summary.log docker-peer-state.log app-folder-status.log app-connections.log app-system-errors.log peer-folder-status.log peer-connections.log peer-system-errors.log; do
+		if [[ -s "$diagnostics/$name" ]]; then
+			printf '\n--- %s ---\n' "$name" >&2
+			sed -n '1,120p' "$diagnostics/$name" >&2 || true
+		fi
+	done
+	if [[ -s "$diagnostics/docker-peer.log" ]]; then
+		printf '\n--- Docker peer relevant logs ---\n' >&2
+		grep -iE 'error|warning|failed|marker|conflict|synced file|folder.*(state|error)' "$diagnostics/docker-peer.log" | tail -80 >&2 || true
+	fi
+	if [[ -s "$diagnostics/roosync-simulator.log" ]]; then
+		printf '\n--- Simulator relevant logs ---\n' >&2
+		grep -iE 'error|warning|failed|marker|conflict|folder|scan' "$diagnostics/roosync-simulator.log" | tail -80 >&2 || true
+	fi
+	if [[ -s "$E2E_DIR/lima-forward.log" ]]; then
+		printf '\n--- Lima forwarding log ---\n' >&2
+		tail -50 "$E2E_DIR/lima-forward.log" >&2 || true
+	fi
 }
 
 cleanup() {
