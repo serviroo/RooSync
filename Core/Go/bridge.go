@@ -63,6 +63,7 @@ func StartCore(configDir, dataDir, defaultFolder, apiAddress, apiKey string) err
 	if err != nil {
 		return err
 	}
+	localDeviceID := protocol.NewDeviceID(cert.Certificate[0])
 	log.Print("RooSync core: stage=certificate-ready")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -95,7 +96,7 @@ func StartCore(configDir, dataDir, defaultFolder, apiAddress, apiKey string) err
 			c.GUI.Password = guiPasswordHash
 		}
 		for i := range c.Devices {
-			if c.Devices[i].DeviceID == protocol.LocalDeviceID {
+			if c.Devices[i].DeviceID == localDeviceID {
 				c.Devices[i].Name = "RooSync"
 			}
 		}
