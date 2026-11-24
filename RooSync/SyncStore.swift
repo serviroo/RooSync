@@ -394,7 +394,7 @@ final class SyncStore: ObservableObject {
         let suffix = String(name[marker.upperBound...])
         let extensionStart = suffix.firstIndex(of: ".")
         let metadata = extensionStart.map { String(suffix[..<$0]) } ?? suffix
-        guard metadata.range(of: #"^\d{8}-\d{6}-.+$"#, options: .regularExpression) != nil else {
+        guard metadata.range(of: #"^\d{8}-\d{6}(?:-.+)?$"#, options: .regularExpression) != nil else {
             return nil
         }
         let fileExtension = extensionStart.map { String(suffix[$0...]) } ?? ""

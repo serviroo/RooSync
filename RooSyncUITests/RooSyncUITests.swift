@@ -223,12 +223,11 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(conflicts.waitForExistence(timeout: 15))
         conflicts.tap()
 
-        let keepCopy = app.buttons["Keep copy"].firstMatch
-        XCTAssertTrue(keepCopy.waitForExistence(timeout: 30))
-        keepCopy.tap()
-        let extensionlessKeepCopy = app.buttons["Keep copy"].firstMatch
-        XCTAssertTrue(extensionlessKeepCopy.waitForExistence(timeout: 30))
-        extensionlessKeepCopy.tap()
+        for _ in 0..<4 {
+            let keepCopy = app.buttons["Keep copy"].firstMatch
+            XCTAssertTrue(keepCopy.waitForExistence(timeout: 30))
+            keepCopy.tap()
+        }
         XCTAssertTrue(app.staticTexts["No conflicts"].waitForExistence(timeout: 15))
     }
 

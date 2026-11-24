@@ -303,6 +303,11 @@ done
 grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_CONFLICT" || fail "The simulator conflict copy has unexpected contents."
 
 set_folder_paused "$PEER_REST" "$PEER_API_KEY" true
+LEGACY_CONFLICT_TIMESTAMP="$(date -u +%Y%m%d-%H%M%S)"
+LEGACY_MARKDOWN_CONTENT="Legacy timestamp-only conflict copy"
+LEGACY_EXTENSIONLESS_CONTENT="Legacy extensionless timestamp-only conflict copy"
+printf '%s\n' "$LEGACY_MARKDOWN_CONTENT" > "$APP_FOLDER/Legacy note.sync-conflict-$LEGACY_CONFLICT_TIMESTAMP.md"
+printf '%s\n' "$LEGACY_EXTENSIONLESS_CONTENT" > "$APP_FOLDER/Legacy extensionless.sync-conflict-$LEGACY_CONFLICT_TIMESTAMP"
 xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 APP_INSTALLED=1
 xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
@@ -377,6 +382,8 @@ PY
 
 grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Conflicted note (conflict copy).md" || fail "The kept Markdown conflict copy has unexpected contents."
 grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Extensionless conflict (conflict copy)" || fail "The kept extensionless conflict copy has unexpected contents."
+grep -Fxq "$LEGACY_MARKDOWN_CONTENT" "$APP_FOLDER/Legacy note (conflict copy).md" || fail "The kept legacy Markdown conflict copy has unexpected contents."
+grep -Fxq "$LEGACY_EXTENSIONLESS_CONTENT" "$APP_FOLDER/Legacy extensionless (conflict copy)" || fail "The kept legacy extensionless conflict copy has unexpected contents."
 if find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit | rg -q .; then
 	fail "A conflict file remained after choosing Keep copy."
 fi
@@ -385,6 +392,8 @@ fi
 set_folder_paused "$PEER_REST" "$PEER_API_KEY" false
 wait_for_file "$DESKTOP_FOLDER/Conflicted note (conflict copy).md" "kept conflict copy on the Docker peer"
 wait_for_file "$DESKTOP_FOLDER/Extensionless conflict (conflict copy)" "kept extensionless conflict copy on the Docker peer"
+wait_for_file "$DESKTOP_FOLDER/Legacy note (conflict copy).md" "kept legacy Markdown conflict copy on the Docker peer"
+wait_for_file "$DESKTOP_FOLDER/Legacy extensionless (conflict copy)" "kept legacy extensionless conflict copy on the Docker peer"
 for _ in $(seq 1 90); do
 	APP_CONFLICT="$(find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit)"
 	PEER_CONFLICT="$(find "$DESKTOP_FOLDER" -type f -name '*sync-conflict-*' -print -quit)"
@@ -417,5 +426,6 @@ printf '%s\n' \
 	'PASS: sample Obsidian vault synced in both directions.' \
 	'PASS: concurrent edits created a Syncthing conflict copy.' \
 	'PASS: app Keep copy preserved the conflict and removed its conflict suffix.' \
+	'PASS: timestamp-only legacy conflicts kept their original extension behavior.' \
 	'PASS: extensionless Syncthing conflicts were kept without retaining the conflict suffix.' \
 	'PASS: kept copy synced to Docker and removed the conflict on both peers.'
