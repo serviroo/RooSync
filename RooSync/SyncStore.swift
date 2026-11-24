@@ -117,7 +117,7 @@ final class SyncStore: ObservableObject {
             try await reconcileAppDocumentsFolderPaths()
             folders = try await api.folders()
             foldersLoaded = true
-            devices = try await api.devices()
+            devices = try await api.devices().filter { !isLocalDeviceID($0.deviceID) }
             pendingDevices = try await api.pendingDevices()
             pendingFolders = try await api.pendingFolders()
             for folder in folders {
@@ -296,6 +296,10 @@ final class SyncStore: ObservableObject {
     }
 
     func setSharing(_ folder: SyncthingFolder, deviceID: String, shared: Bool) async {
+        guard !isLocalDeviceID(deviceID) else {
+            errorMessage = SyncStoreError.localDeviceCannotBeShared.localizedDescription
+            return
+        }
         var deviceIDs = folder.devices.map(\.deviceID)
         if shared {
             deviceIDs.append(deviceID)
@@ -650,6 +654,15 @@ final class SyncStore: ObservableObject {
         }
         return trimmed
     }
+
+    func isLocalDeviceID(_ candidate: String) -> Bool {
+        guard !deviceID.isEmpty else { return false }
+        return Self.canonicalDeviceID(normalizeDeviceID(candidate)) == Self.canonicalDeviceID(deviceID)
+    }
+
+    private static func canonicalDeviceID(_ value: String) -> String {
+        value.filter { $0.isLetter || $0.isNumber }.uppercased()
+    }
 }
 
 struct ConflictFile: Identifiable {
@@ -709,6 +722,7 @@ private enum APIKeyStore {
 
 private enum SyncStoreError: LocalizedError {
     case coreStartFailed
+    case localDeviceCannotBeShared
     case folderAccessDenied
     case invalidFolderID
     case invalidFolderName
@@ -717,6 +731,7 @@ private enum SyncStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .coreStartFailed: "The Syncthing core could not be started."
+        case .localDeviceCannotBeShared: "The local RooSync device cannot be selected as a remote peer."
         case .folderAccessDenied: "RooSync could not access the selected folder."
         case .invalidFolderID: "Enter a valid folder ID without path separators."
         case .invalidFolderName: "Choose a folder name without path separators."

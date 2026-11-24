@@ -7,7 +7,12 @@ final class RooSyncUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(app.staticTexts["Device ID"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        let ownDeviceID = app.staticTexts["device-id"]
+        XCTAssertTrue(ownDeviceID.waitForExistence(timeout: 30))
+        XCTAssertEqual(
+            app.staticTexts.matching(NSPredicate(format: "label == %@", ownDeviceID.label)).count,
+            1
+        )
         XCTAssertTrue(app.buttons["Sync now"].exists)
     }
 
@@ -82,6 +87,7 @@ final class RooSyncUITests: XCTestCase {
         app.staticTexts["Share with devices"].tap()
         let peerSwitch = app.switches["Docker Syncthing E2E"]
         XCTAssertTrue(peerSwitch.waitForExistence(timeout: 15))
+        XCTAssertEqual(app.switches.count, 1)
         if peerSwitch.value as? String == "0" {
             peerSwitch.tap()
         }

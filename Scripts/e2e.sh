@@ -175,6 +175,8 @@ api_request() {
 }
 
 PEER_ID="$(api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/status | python3 -c 'import json,sys; print(json.load(sys.stdin)["myID"])')"
+APP_LOCAL_DEVICE_CONFIGURED="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/devices | python3 -c 'import json,sys; devices=json.load(sys.stdin); print(str(any(d.get("deviceID")==sys.argv[1] for d in devices)).lower())' "$APP_ID")"
+[[ "$APP_LOCAL_DEVICE_CONFIGURED" == true ]] || fail "The core config no longer contains its local device entry."
 
 add_device() {
 	local base=$1 key=$2 id=$3 name=$4 address=$5 defaults body
