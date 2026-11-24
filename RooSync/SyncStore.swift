@@ -369,14 +369,14 @@ final class SyncStore: ObservableObject {
         let fileManager = FileManager.default
         if keep {
             let name = conflict.url.lastPathComponent
-            guard let range = name.range(of: ".sync-conflict-") else { return }
-            let originalName = String(name[..<range.lowerBound])
-            let ext = conflict.url.pathExtension
+            guard let (originalName, extensionSuffix) = conflictNameParts(name) else {
+                throw SyncStoreError.invalidConflictName
+            }
             let parent = conflict.url.deletingLastPathComponent()
-            var candidate = parent.appendingPathComponent("\(originalName) (conflict copy)").appendingPathExtension(ext)
+            var candidate = parent.appendingPathComponent("\(originalName) (conflict copy)\(extensionSuffix)")
             var suffix = 2
             while fileManager.fileExists(atPath: candidate.path) {
-                candidate = parent.appendingPathComponent("\(originalName) (conflict copy \(suffix))").appendingPathExtension(ext)
+                candidate = parent.appendingPathComponent("\(originalName) (conflict copy \(suffix))\(extensionSuffix)")
                 suffix += 1
             }
             try fileManager.moveItem(at: conflict.url, to: candidate)
@@ -384,6 +384,18 @@ final class SyncStore: ObservableObject {
             try fileManager.removeItem(at: conflict.url)
         }
         try await api.scan(folderID)
+    }
+
+    private func conflictNameParts(_ name: String) -> (String, String)? {
+        guard let marker = name.range(of: ".sync-conflict-", options: .backwards) else { return nil }
+        let suffix = String(name[marker.upperBound...])
+        let extensionStart = suffix.firstIndex(of: ".")
+        let metadata = extensionStart.map { String(suffix[..<$0]) } ?? suffix
+        guard metadata.range(of: #"^\d{8}-\d{6}-.+$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        let fileExtension = extensionStart.map { String(suffix[$0...]) } ?? ""
+        return (String(name[..<marker.lowerBound]), fileExtension)
     }
 
     func logs() async throws -> String {
@@ -777,6 +789,7 @@ private enum SyncStoreError: LocalizedError {
     case folderAccessDenied
     case invalidFolderID
     case invalidFolderName
+    case invalidConflictName
     case folderAlreadyExists
 
     var errorDescription: String? {
@@ -787,6 +800,7 @@ private enum SyncStoreError: LocalizedError {
         case .folderAccessDenied: "RooSync could not access the selected folder."
         case .invalidFolderID: "Enter a valid folder ID without path separators."
         case .invalidFolderName: "Choose a folder name without path separators."
+        case .invalidConflictName: "The conflict file name is not a valid Syncthing conflict copy."
         case .folderAlreadyExists: "A folder with this Syncthing ID already exists."
         }
     }
