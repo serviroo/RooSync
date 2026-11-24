@@ -326,8 +326,24 @@ final class SyncStore: ObservableObject {
     }
 
     func accept(_ folder: PendingFolder) async {
-        await run {
-            try await self.addFolder(id: folder.id, name: folder.name, sharedWith: [folder.deviceID])
+        do {
+            try await coreStartupTask.value
+            guard !isLocalDeviceID(folder.deviceID) else {
+                throw SyncStoreError.localDeviceCannotBeShared
+            }
+            let configuredFolders = try await api.folders()
+            if let existing = configuredFolders.first(where: { $0.id == folder.id }) {
+                var deviceIDs = existing.devices.map(\.deviceID)
+                if !deviceIDs.contains(folder.deviceID) {
+                    deviceIDs.append(folder.deviceID)
+                }
+                try await api.setFolderSharing(existing.id, deviceIDs: Array(Set(deviceIDs)))
+                await refresh()
+            } else {
+                try await addFolder(id: folder.id, name: folder.name, sharedWith: [folder.deviceID])
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
