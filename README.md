@@ -142,14 +142,16 @@ The script pairs the simulator app's embedded core with a Docker Syncthing peer,
 checks a sample vault in both directions, creates a concurrent-edit conflict,
 and exercises **Keep copy** in the app's UI test. It does not produce screenshots.
 
-Local validation on 2026-11-24 used Xcode 26.6, an iOS 26.5 simulator, and the
-Syncthing 2.1.7 Docker peer. `./Scripts/e2e.sh` completed with five UI tests and
-zero failures; it verified two-way file sync, conflict creation, keeping the
-conflict copy, and removal of the conflict on both peers after they resumed.
-The UI suite also checked Device ID display, unauthenticated REST rejection, and
-folder pause/resume.
-This simulator-only result is not a physical-device or Obsidian interoperability
-test.
+Local validation on 2026-11-24 used Xcode 26.6, an iOS 27.0 simulator, and the
+Syncthing 2.1.7 Docker peer. `./Scripts/e2e.sh` completed with nine UI tests and
+zero failures. It verified the local device remains in core configuration with
+the name RooSync while peer controls hide it, self-add rejection, API-key access
+and denial of the root-cookie/CSRF bypass, duplicate external-folder rejection
+without configuration changes, accepting an offer for an existing folder,
+safe paths for empty and slash-containing labels, pause/resume, two-way vault
+sync, Markdown and extensionless conflicts, and Keep-copy convergence on both
+peers. This simulator-only result is not a physical-device or Obsidian
+interoperability test.
 
 The workflow also builds an unsigned arm64 device product and publishes its app
 bundle, unsigned IPA, and source archive. The app bundle and source archive
