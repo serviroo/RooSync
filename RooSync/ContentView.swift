@@ -271,6 +271,7 @@ private struct AddFolderView: View {
     @State private var folderID = ""
     @State private var showingPicker = false
     @State private var working = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -311,6 +312,14 @@ private struct AddFolderView: View {
             .overlay {
                 if working { ProgressView().padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
             }
+            .alert("RooSync", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
         }
     }
 
@@ -322,7 +331,7 @@ private struct AddFolderView: View {
                 try await store.addFolder(id: normalizedID, name: name)
                 dismiss()
             } catch {
-                store.report(error)
+                errorMessage = error.localizedDescription
             }
         }
     }
@@ -335,7 +344,7 @@ private struct AddFolderView: View {
             try await store.addFolder(id: normalizedID, name: label, externalURL: url)
             dismiss()
         } catch {
-            store.report(error)
+            errorMessage = error.localizedDescription
         }
     }
 
