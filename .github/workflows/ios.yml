@@ -1,0 +1,63 @@
+name: iOS build and E2E
+
+on:
+  push:
+    branches: [main, "devin/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulator-e2e:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: 1.27.4
+          cache: false
+
+      - name: Install XcodeGen and QEMU Docker runtime
+        run: brew install xcodegen colima qemu docker
+
+      - name: Start Docker engine with QEMU
+        run: colima start --vm-type qemu --runtime docker --cpu 2 --memory 4 --disk 30
+
+      - name: Install pinned Go license scanner
+        run: go install github.com/google/go-licenses@v1.6.0
+
+      - name: Run simulator-to-Docker sync E2E
+        run: ./Scripts/e2e.sh
+
+      - name: Collect Syncthing dependency notices
+        if: always()
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          ./Scripts/collect-licenses.sh
+
+      - name: Build unsigned arm64 device app
+        run: |
+          xcodebuild -project RooSync.xcodeproj -scheme RooSync \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath .build/DeviceDerivedData \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Package unsigned IPA and source archive
+        run: ./Scripts/package-artifacts.sh "$RUNNER_TEMP/RooSync-artifacts"
+
+      - name: Upload build and E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roosync-ios-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/RooSync-artifacts/*
+            .build/e2e/**/*.log
+            .build/e2e/**/*.xcresult
+            .build/third-party-licenses-v2.1.7/**
+          if-no-files-found: warn
+          retention-days: 14

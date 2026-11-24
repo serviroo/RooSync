@@ -1,0 +1,7 @@
+.build/
+build/
+DerivedData/
+Frameworks/RooSyncCore.xcframework/
+*.xcuserstate
+xcuserdata/
+*.xcresult
