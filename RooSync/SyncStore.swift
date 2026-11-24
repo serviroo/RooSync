@@ -230,6 +230,7 @@ final class SyncStore: ObservableObject {
     func addFolder(id: String, name: String, externalURL: URL) async throws {
         let folderID = try normalizedFolderID(id)
         let label = try normalizedFolderName(name)
+        try await ensureFolderIDAvailable(folderID)
         guard externalURL.startAccessingSecurityScopedResource() else {
             throw SyncStoreError.folderAccessDenied
         }
@@ -585,10 +586,7 @@ final class SyncStore: ObservableObject {
     private func addDocumentsFolder(id: String, name: String, sharedWith: [String]) async throws {
         let folderID = try normalizedFolderID(id)
         let label = try normalizedFolderName(name)
-        let existingFolders = try await api.folders()
-        guard !existingFolders.contains(where: { $0.id == folderID }) else {
-            throw SyncStoreError.folderAlreadyExists
-        }
+        try await ensureFolderIDAvailable(folderID)
         let fileManager = FileManager.default
         let vaults = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Vaults", isDirectory: true).standardizedFileURL
@@ -620,6 +618,14 @@ final class SyncStore: ObservableObject {
         } catch {
             try? fileManager.removeItem(at: path)
             throw error
+        }
+    }
+
+    private func ensureFolderIDAvailable(_ folderID: String) async throws {
+        try await coreStartupTask.value
+        let existingFolders = try await api.folders()
+        guard !existingFolders.contains(where: { $0.id == folderID }) else {
+            throw SyncStoreError.folderAlreadyExists
         }
     }
 
