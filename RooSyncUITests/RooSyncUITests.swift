@@ -49,7 +49,7 @@ final class RooSyncUITests: XCTestCase {
         idField.typeText(ownDeviceID.label)
 
         XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
-        let addButton = app.buttons.matching(identifier: "Add").lastMatch
+        let addButton = app.buttons.matching(identifier: "Add").firstMatch
         XCTAssertFalse(addButton.isEnabled)
     }
 
