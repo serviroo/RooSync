@@ -596,12 +596,21 @@ final class SyncStore: ObservableObject {
     }
 
     private func addFolder(id: String, name: String, sharedWith: [String]) async throws {
-        try await addDocumentsFolder(id: id, name: name, sharedWith: sharedWith)
+        try await addDocumentsFolder(id: id, name: name, sharedWith: sharedWith, incomingLabel: true)
     }
 
-    private func addDocumentsFolder(id: String, name: String, sharedWith: [String]) async throws {
+    private func addDocumentsFolder(id: String, name: String, sharedWith: [String], incomingLabel: Bool = false) async throws {
         let folderID = try normalizedFolderID(id)
-        let label = try normalizedFolderName(name)
+        let label: String
+        var component: String
+        if incomingLabel {
+            let remoteLabel = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            label = remoteLabel.isEmpty ? folderID : remoteLabel
+            component = safeFolderComponent(label, fallbackID: folderID)
+        } else {
+            label = try normalizedFolderName(name)
+            component = label
+        }
         try await ensureFolderIDAvailable(folderID)
         let fileManager = FileManager.default
         let vaults = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -611,7 +620,6 @@ final class SyncStore: ObservableObject {
             .filter { CharacterSet.alphanumerics.contains($0) }
             .map { String($0) }
             .joined()
-        var component = label
         var path = vaults.appendingPathComponent(component, isDirectory: true)
         if fileManager.fileExists(atPath: path.path) {
             component += " (\(idSuffix.prefix(8).isEmpty ? "folder" : String(idSuffix.prefix(8))))"
@@ -635,6 +643,22 @@ final class SyncStore: ObservableObject {
             try? fileManager.removeItem(at: path)
             throw error
         }
+    }
+
+    private func safeFolderComponent(_ label: String, fallbackID: String) -> String {
+        let sanitized = String(label.unicodeScalars.map { scalar in
+            scalar == "/" || scalar == "\\" || CharacterSet.controlCharacters.contains(scalar)
+                ? "-"
+                : String(scalar)
+        }.joined())
+        let component = sanitized.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if !component.isEmpty && component != "." && component != ".." {
+            return component
+        }
+        let safeID = String(fallbackID.map { character in
+            character.isLetter || character.isNumber || character == "-" || character == "_" ? character : "-"
+        }).trimmingCharacters(in: CharacterSet(charactersIn: ".- "))
+        return safeID.isEmpty ? "syncthing-folder" : safeID
     }
 
     private func ensureFolderIDAvailable(_ folderID: String) async throws {
