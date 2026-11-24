@@ -54,6 +54,65 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testAcceptingOfferForExistingFolderSharesWithoutReplacingIt() {
+        let app = XCUIApplication()
+        app.launch()
+        let accept = app.buttons["accept-folder-roosync-e2e-existing-offer"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 60))
+        accept.tap()
+        XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
+    }
+
+    @MainActor
+    func testAcceptingUnsafeFolderLabelsUsesSafePaths() {
+        let app = XCUIApplication()
+        app.launch()
+        let slashOffer = app.buttons["accept-folder-roosync-e2e-slash-label"]
+        XCTAssertTrue(slashOffer.waitForExistence(timeout: 60))
+        slashOffer.tap()
+        XCTAssertTrue(slashOffer.waitForNonExistence(timeout: 30))
+        let emptyOffer = app.buttons["accept-folder-roosync-e2e-empty-label"]
+        XCTAssertTrue(emptyOffer.waitForExistence(timeout: 30))
+        emptyOffer.tap()
+        XCTAssertTrue(emptyOffer.waitForNonExistence(timeout: 30))
+    }
+
+    @MainActor
+    func testDuplicateExternalFolderIDIsRejected() {
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["Add"].tap()
+        app.buttons["Add app folder"].tap()
+
+        let folderID = app.textFields["Syncthing folder ID"]
+        let name = app.textFields["Name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 15))
+        folderID.tap()
+        folderID.typeText("roosync-e2e-vault")
+        name.tap()
+        name.typeText("Duplicate external folder")
+        app.buttons["Choose an existing folder…"].tap()
+
+        let browse = app.buttons["Browse"]
+        if browse.waitForExistence(timeout: 5) { browse.tap() }
+        let onMyIPhone = app.staticTexts["On My iPhone"]
+        XCTAssertTrue(onMyIPhone.waitForExistence(timeout: 15))
+        onMyIPhone.tap()
+        let appFolder = app.staticTexts["RooSync"]
+        XCTAssertTrue(appFolder.waitForExistence(timeout: 15))
+        appFolder.tap()
+        let vaults = app.staticTexts["Vaults"]
+        XCTAssertTrue(vaults.waitForExistence(timeout: 15))
+        vaults.tap()
+        let candidate = app.staticTexts["RooSync E2E Vault"]
+        XCTAssertTrue(candidate.waitForExistence(timeout: 15))
+        candidate.tap()
+        app.buttons["Open"].tap()
+
+        XCTAssertTrue(app.alerts.staticTexts["A folder with this Syncthing ID already exists."].waitForExistence(timeout: 30))
+    }
+
+    @MainActor
     func testSetupE2ESyncFolder() {
         let app = XCUIApplication()
         app.launch()
@@ -146,6 +205,9 @@ final class RooSyncUITests: XCTestCase {
         let keepCopy = app.buttons["Keep copy"].firstMatch
         XCTAssertTrue(keepCopy.waitForExistence(timeout: 30))
         keepCopy.tap()
+        let extensionlessKeepCopy = app.buttons["Keep copy"].firstMatch
+        XCTAssertTrue(extensionlessKeepCopy.waitForExistence(timeout: 30))
+        extensionlessKeepCopy.tap()
         XCTAssertTrue(app.staticTexts["No conflicts"].waitForExistence(timeout: 15))
     }
 

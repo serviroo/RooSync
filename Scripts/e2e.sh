@@ -206,6 +206,7 @@ APP_FOLDER="$APP_DATA/Documents/Vaults/$APP_FOLDER_LABEL"
 mkdir -p "$APP_FOLDER"
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflicted note.md" "$APP_FOLDER/"
 cp "$ROOT/docs/fixtures/ObsidianVault/From iPhone.md" "$APP_FOLDER/"
+printf 'Initial extensionless conflict content\n' > "$APP_FOLDER/Extensionless conflict"
 
 add_folder() {
 	local base=$1 key=$2 path=$3 device=$4 ignore_perms=$5 defaults body
@@ -216,6 +217,21 @@ add_folder() {
 
 add_folder "$APP_REST" "$APP_API_KEY" "$APP_FOLDER" "$PEER_ID" false
 add_folder "$PEER_REST" "$PEER_API_KEY" /vault "$APP_ID" true
+
+EXISTING_OFFER_ID="roosync-e2e-existing-offer"
+EXISTING_OFFER_PATH="$APP_DATA/Documents/Vaults/Existing E2E Offer"
+mkdir -p "$EXISTING_OFFER_PATH"
+add_folder_config() {
+	local base=$1 key=$2 folder_id=$3 label=$4 path=$5 device=$6 defaults body
+	defaults="$(api_request "$base" "$key" GET /rest/config/defaults/folder)"
+	body="$(python3 -c 'import json,sys; v=json.load(sys.stdin); v["id"]=sys.argv[1]; v["label"]=sys.argv[2]; v["path"]=sys.argv[3]; v["devices"]=[{"deviceID":sys.argv[4]}] if sys.argv[4] else []; print(json.dumps(v))' "$folder_id" "$label" "$path" "$device" <<<"$defaults")"
+	api_request "$base" "$key" POST /rest/config/folders "$body" >/dev/null
+}
+add_folder_config "$APP_REST" "$APP_API_KEY" "$EXISTING_OFFER_ID" "Existing E2E Offer" "$EXISTING_OFFER_PATH" ""
+"${DOCKER[@]}" exec "$CONTAINER_NAME" mkdir -p /tmp/roosync-existing /tmp/roosync-slash /tmp/roosync-empty
+add_folder_config "$PEER_REST" "$PEER_API_KEY" "$EXISTING_OFFER_ID" "Remote Existing Offer" /tmp/roosync-existing "$APP_ID"
+add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-slash-label "Incoming/Notes" /tmp/roosync-slash "$APP_ID"
+add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-empty-label "" /tmp/roosync-empty "$APP_ID"
 
 CSRF_PROBE_DIR="$E2E_DIR/csrf-probe"
 mkdir -p "$CSRF_PROBE_DIR"
@@ -255,6 +271,7 @@ wait_for_file() {
 
 wait_for_file "$APP_FOLDER/Welcome.md" "Docker-to-simulator note"
 wait_for_file "$DESKTOP_FOLDER/From iPhone.md" "simulator-to-Docker note"
+wait_for_file "$DESKTOP_FOLDER/Extensionless conflict" "extensionless conflict fixture on Docker"
 cmp "$ROOT/docs/fixtures/ObsidianVault/Welcome.md" "$APP_FOLDER/Welcome.md"
 cmp "$ROOT/docs/fixtures/ObsidianVault/From iPhone.md" "$DESKTOP_FOLDER/From iPhone.md"
 
@@ -262,6 +279,8 @@ set_folder_paused "$APP_REST" "$APP_API_KEY" true
 set_folder_paused "$PEER_REST" "$PEER_API_KEY" true
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
+printf 'Edited on the iPhone peer\n' > "$APP_FOLDER/Extensionless conflict"
+printf 'Edited on the Docker peer\n' > "$DESKTOP_FOLDER/Extensionless conflict"
 set_folder_paused "$APP_REST" "$APP_API_KEY" false
 set_folder_paused "$PEER_REST" "$PEER_API_KEY" false
 
@@ -285,9 +304,11 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-maximum-concurrent-test-simulator-destinations 1 \
 	CODE_SIGNING_ALLOWED=NO test-without-building \
 	-only-testing:RooSyncUITests/RooSyncUITests/testFirstRunShowsDeviceIdentityAndSyncAction \
-	-only-testing:RooSyncUITests/RooSyncUITests/testEmbeddedRESTRejectsRequestsWithoutAPIKey \
 	-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
 	-only-testing:RooSyncUITests/RooSyncUITests/testEmbeddedRESTRejectsRequestsWithoutAPIKey \
+	-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingOfferForExistingFolderSharesWithoutReplacingIt \
+	-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingUnsafeFolderLabelsUsesSafePaths \
+	-only-testing:RooSyncUITests/RooSyncUITests/testDuplicateExternalFolderIDIsRejected \
 	-only-testing:RooSyncUITests/RooSyncUITests/testPauseE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testResumeE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testConflictCopyCanBeKept \
@@ -324,9 +345,13 @@ done
 [[ "$APP_FOLDER" == "$APP_DATA/Documents/Vaults/"* && -d "$APP_FOLDER" ]] || \
 	fail "The simulator did not rebase its E2E vault after the UI-test app container changed."
 
-KEPT_COPY="$(find "$APP_FOLDER" -type f -name '*conflict copy*' -print -quit)"
-[[ -n "$KEPT_COPY" ]] || fail "The app did not preserve the conflict copy."
-grep -Eq 'Edited on the (iPhone|Docker) peer' "$KEPT_COPY" || fail "The kept conflict copy has unexpected contents."
+E2E_FOLDERS="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/folders)"
+python3 -c 'import json,sys; folders=json.loads(sys.argv[1]); by_id={f["id"]:f for f in folders}; main=by_id.get(sys.argv[2], {}); existing=by_id.get(sys.argv[6], {}); slash=by_id.get("roosync-e2e-slash-label", {}); empty=by_id.get("roosync-e2e-empty-label", {}); assert main.get("label")==sys.argv[3] and main.get("path")==sys.argv[4] and any(d.get("deviceID")==sys.argv[5] for d in main.get("devices", [])); assert existing.get("path")==sys.argv[7] and existing.get("label")=="Existing E2E Offer" and any(d.get("deviceID")==sys.argv[5] for d in existing.get("devices", [])); assert slash.get("label")=="Incoming/Notes" and slash.get("path", "").startswith(sys.argv[8]+"/") and "/" not in slash["path"].split("/")[-1]; assert empty.get("label")=="roosync-e2e-empty-label" and empty.get("path", "").startswith(sys.argv[8]+"/")' \
+	"$E2E_FOLDERS" "$APP_FOLDER_ID" "$APP_FOLDER_LABEL" "$APP_FOLDER" "$PEER_ID" "$EXISTING_OFFER_ID" "$APP_DATA/Documents/Vaults/Existing E2E Offer" "$APP_DATA/Documents/Vaults" || \
+	fail "Folder-offer acceptance or duplicate-ID rejection changed preserved config or created unsafe paths."
+
+grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Conflicted note (conflict copy).md" || fail "The kept Markdown conflict copy has unexpected contents."
+grep -Eq 'Edited on the (iPhone|Docker) peer' "$APP_FOLDER/Extensionless conflict (conflict copy)" || fail "The kept extensionless conflict copy has unexpected contents."
 if find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit | rg -q .; then
 	fail "A conflict file remained after choosing Keep copy."
 fi
@@ -334,6 +359,7 @@ fi
 
 set_folder_paused "$PEER_REST" "$PEER_API_KEY" false
 wait_for_file "$DESKTOP_FOLDER/Conflicted note (conflict copy).md" "kept conflict copy on the Docker peer"
+wait_for_file "$DESKTOP_FOLDER/Extensionless conflict (conflict copy)" "kept extensionless conflict copy on the Docker peer"
 for _ in $(seq 1 90); do
 	APP_CONFLICT="$(find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit)"
 	PEER_CONFLICT="$(find "$DESKTOP_FOLDER" -type f -name '*sync-conflict-*' -print -quit)"
@@ -345,7 +371,11 @@ done
 printf '%s\n' \
 	'PASS: embedded iOS Syncthing core paired with Docker Syncthing.' \
 	'PASS: unauthenticated root-cookie/CSRF requests were denied.' \
+	'PASS: existing folder offers were accepted without replacing configuration.' \
+	'PASS: empty and slash-containing folder labels were accepted with safe paths.' \
+	'PASS: duplicate external folder IDs were rejected without overwriting config.' \
 	'PASS: sample Obsidian vault synced in both directions.' \
 	'PASS: concurrent edits created a Syncthing conflict copy.' \
 	'PASS: app Keep copy preserved the conflict and removed its conflict suffix.' \
+	'PASS: extensionless Syncthing conflicts were kept without retaining the conflict suffix.' \
 	'PASS: kept copy synced to Docker and removed the conflict on both peers.'

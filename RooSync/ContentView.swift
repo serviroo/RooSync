@@ -68,6 +68,7 @@ private struct FolderListView: View {
                                 Button("Accept") { Task { await store.accept(folder) } }
                                     .buttonStyle(.borderedProminent)
                                     .controlSize(.small)
+                                    .accessibilityIdentifier("accept-folder-\(folder.id)")
                             }
                         }
                     }
