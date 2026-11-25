@@ -44,6 +44,9 @@ capture_failure_diagnostics() {
 			>"$diagnostics/docker-peer-state.log" 2>&1 || true
 		"${DOCKER[@]}" logs --timestamps --tail 1000 "$CONTAINER_NAME" \
 			>"$diagnostics/docker-peer.log" 2>&1 || true
+		"${DOCKER[@]}" exec --user "${PEER_UID:-0}:${PEER_GID:-0}" "$CONTAINER_NAME" \
+			sh -c 'for path in "/vault/Conflicted note.md" "/vault/Extensionless conflict"; do if [ -f "$path" ]; then printf "%s " "$path"; wc -c < "$path"; fi; done' \
+			>"$diagnostics/docker-conflict-files.log" 2>&1 || true
 	fi
 
 	if declare -F api_request >/dev/null; then
@@ -54,6 +57,8 @@ capture_failure_diagnostics() {
 				>"$diagnostics/app-connections.log" 2>&1 || true
 			api_request "$APP_REST" "$APP_API_KEY" GET /rest/system/error \
 				>"$diagnostics/app-system-errors.log" 2>&1 || true
+			api_request "$APP_REST" "$APP_API_KEY" GET "/rest/db/file?folder=$APP_FOLDER_ID&file=Conflicted%20note.md" \
+				>"$diagnostics/app-conflict-file.log" 2>&1 || true
 		fi
 		if [[ -n "${PEER_API_KEY:-}" ]]; then
 			api_request "$PEER_REST" "$PEER_API_KEY" GET "/rest/db/status?folder=$APP_FOLDER_ID" \
@@ -62,11 +67,13 @@ capture_failure_diagnostics() {
 				>"$diagnostics/peer-connections.log" 2>&1 || true
 			api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/error \
 				>"$diagnostics/peer-system-errors.log" 2>&1 || true
+			api_request "$PEER_REST" "$PEER_API_KEY" GET "/rest/db/file?folder=$APP_FOLDER_ID&file=Conflicted%20note.md" \
+				>"$diagnostics/peer-conflict-file.log" 2>&1 || true
 		fi
 	fi
 
 	printf '\nE2E failure diagnostics (API keys and config XML omitted):\n' >&2
-	for name in summary.log docker-peer-state.log app-folder-status.log app-connections.log app-system-errors.log peer-folder-status.log peer-connections.log peer-system-errors.log; do
+	for name in summary.log docker-peer-state.log docker-conflict-files.log app-folder-status.log app-connections.log app-system-errors.log app-conflict-file.log peer-folder-status.log peer-connections.log peer-system-errors.log peer-conflict-file.log; do
 		if [[ -s "$diagnostics/$name" ]]; then
 			printf '\n--- %s ---\n' "$name" >&2
 			sed -n '1,120p' "$diagnostics/$name" >&2 || true
@@ -464,11 +471,16 @@ wait_for_device_connection_state "$APP_REST" "$APP_API_KEY" "$PEER_ID" true
 wait_for_device_connection_state "$PEER_REST" "$PEER_API_KEY" "$APP_ID" true
 
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
-cp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
+cat "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" |
+	"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" -i "$CONTAINER_NAME" \
+		sh -c 'cat > "$1"' sh "/vault/Conflicted note.md"
 printf 'Edited on the iPhone peer\n' > "$APP_FOLDER/Extensionless conflict"
-printf 'Edited on the Docker peer\n' > "$DESKTOP_FOLDER/Extensionless conflict"
+printf 'Edited on the Docker peer\n' |
+	"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" -i "$CONTAINER_NAME" \
+		sh -c 'cat > "$1"' sh "/vault/Extensionless conflict"
 cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
-cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
+"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" "$CONTAINER_NAME" \
+	cat "/vault/Conflicted note.md" | cmp - "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md"
 api_request "$APP_REST" "$APP_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
 api_request "$PEER_REST" "$PEER_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
 
@@ -487,7 +499,8 @@ done
 	"$PEER_CONFLICT_LOCAL_VERSION" != "$PEER_CONFLICT_BASE_VERSION" ]] || \
 	fail "Both peers did not index their conflict edits while disconnected."
 cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
-cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
+"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" "$CONTAINER_NAME" \
+	cat "/vault/Conflicted note.md" | cmp - "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md"
 
 set_device_paused "$APP_REST" "$APP_API_KEY" "$PEER_ID" false
 set_device_paused "$PEER_REST" "$PEER_API_KEY" "$APP_ID" false
