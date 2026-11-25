@@ -472,6 +472,16 @@ api_request() {
 	fi
 }
 
+peer_rest_authenticated_ready=false
+while (( SECONDS < peer_rest_deadline )); do
+	if api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/status "" 2 >/dev/null 2>&1 &&
+		api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/config/devices "" 2 >/dev/null 2>&1; then
+		peer_rest_authenticated_ready=true
+		break
+	fi
+	sleep 2
+done
+[[ "$peer_rest_authenticated_ready" == true ]] || fail "Docker Syncthing authenticated REST API did not become ready within ${PEER_REST_READY_TIMEOUT_SECONDS}s."
 PEER_ID="$(api_request "$PEER_REST" "$PEER_API_KEY" GET /rest/system/status | python3 -c 'import json,sys; print(json.load(sys.stdin)["myID"])')"
 APP_LOCAL_DEVICE_CONFIGURED="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/devices | python3 -c 'import json,sys; devices=json.load(sys.stdin); print(str(any(d.get("deviceID")==sys.argv[1] for d in devices)).lower())' "$APP_ID")"
 [[ "$APP_LOCAL_DEVICE_CONFIGURED" == true ]] || fail "The core config no longer contains its local device entry."
