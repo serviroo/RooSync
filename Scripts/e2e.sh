@@ -144,6 +144,15 @@ PY
 
 capture_failure_diagnostics() {
 	local diagnostics="$E2E_DIR/failure-diagnostics"
+	local conflict_path relative_path encoded response side base key
+	local -a conflict_paths=(
+		"Conflicted note.md"
+		"Extensionless conflict"
+		"Conflicted note (conflict copy).md"
+		"Extensionless conflict (conflict copy)"
+		"Legacy note (conflict copy).md"
+		"Legacy extensionless (conflict copy)"
+	)
 	mkdir -p "$diagnostics"
 	print_xcresult_failure_diagnostics "$E2E_DIR/RooSync-E2E.xcresult" ui
 	print_xcresult_failure_diagnostics "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" pending-collision
@@ -154,6 +163,8 @@ capture_failure_diagnostics() {
 		printf 'app_folder_id=%s\n' "$APP_FOLDER_ID"
 		printf 'app_folder_path=%s\n' "${APP_FOLDER:-unavailable}"
 		printf 'peer_container=%s\n' "$CONTAINER_NAME"
+		printf 'remaining_app_conflict=%s\n' "${APP_CONFLICT:-not-checked}"
+		printf 'remaining_peer_conflict=%s\n' "${PEER_CONFLICT:-not-checked}"
 	} >"$diagnostics/summary.log" 2>&1
 
 	if [[ -n "${SIMULATOR_UDID:-}" ]]; then
@@ -175,6 +186,21 @@ capture_failure_diagnostics() {
 		"${DOCKER[@]}" exec --user "${PEER_UID:-0}:${PEER_GID:-0}" "$CONTAINER_NAME" \
 			sh -c 'for path in "/vault/Conflicted note.md" "/vault/Extensionless conflict"; do if [ -f "$path" ]; then printf "%s " "$path"; wc -c < "$path"; fi; done' \
 			>"$diagnostics/docker-conflict-files.log" 2>&1 || true
+		"${DOCKER[@]}" exec --user "${PEER_UID:-0}:${PEER_GID:-0}" "$CONTAINER_NAME" \
+			find /vault -type f -name '*sync-conflict-*' -print \
+			>"$diagnostics/peer-conflict-suffix-files.log" 2>&1 || true
+	fi
+	if [[ -n "${APP_FOLDER:-}" && -d "$APP_FOLDER" ]]; then
+		find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print \
+			>"$diagnostics/app-conflict-suffix-files.log" 2>&1 || true
+		while IFS= read -r conflict_path; do
+			[[ -n "$conflict_path" ]] && shasum -a 256 "$conflict_path" >>"$diagnostics/app-conflict-suffix-hashes.log" 2>&1 || true
+		done <"$diagnostics/app-conflict-suffix-files.log"
+	fi
+	if [[ -s "$diagnostics/peer-conflict-suffix-files.log" ]]; then
+		while IFS= read -r conflict_path; do
+			[[ -n "$conflict_path" ]] && "${DOCKER[@]}" exec --user "${PEER_UID:-0}:${PEER_GID:-0}" "$CONTAINER_NAME" sha256sum "$conflict_path" >>"$diagnostics/peer-conflict-suffix-hashes.log" 2>&1 || true
+		done <"$diagnostics/peer-conflict-suffix-files.log"
 	fi
 
 	if declare -F api_request >/dev/null; then
@@ -198,10 +224,33 @@ capture_failure_diagnostics() {
 			api_request "$PEER_REST" "$PEER_API_KEY" GET "/rest/db/file?folder=$APP_FOLDER_ID&file=Conflicted%20note.md" \
 				>"$diagnostics/peer-conflict-file.log" 2>&1 || true
 		fi
+		if [[ -n "${APP_API_KEY:-}" && -n "${PEER_API_KEY:-}" ]]; then
+			[[ -n "${LEGACY_CONFLICT_TIMESTAMP:-}" ]] && conflict_paths+=(
+				"Legacy note.sync-conflict-$LEGACY_CONFLICT_TIMESTAMP.md"
+				"Legacy extensionless.sync-conflict-$LEGACY_CONFLICT_TIMESTAMP"
+			)
+			[[ -n "${APP_CONFLICT:-}" && -n "${APP_FOLDER:-}" ]] && conflict_paths+=("${APP_CONFLICT#"$APP_FOLDER"/}")
+			[[ -n "${PEER_CONFLICT:-}" && -n "${DESKTOP_FOLDER:-}" ]] && conflict_paths+=("${PEER_CONFLICT#"$DESKTOP_FOLDER"/}")
+			for relative_path in "${conflict_paths[@]}"; do
+				encoded="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$relative_path")"
+				for side in app peer; do
+					if [[ "$side" == app ]]; then base="$APP_REST"; key="$APP_API_KEY"; else base="$PEER_REST"; key="$PEER_API_KEY"; fi
+					response="$(api_request "$base" "$key" GET "/rest/db/file?folder=$APP_FOLDER_ID&file=$encoded" "" 3 2>/dev/null || true)"
+					printf 'path=%q side=%s ' "$relative_path" "$side" >>"$diagnostics/conflict-index-versions.log"
+					python3 -c 'import json,sys
+try: d=json.loads(sys.stdin.read())
+except Exception: print("unavailable"); raise SystemExit
+for k in ("global","local"):
+ f=d.get(k,{})
+ print("%sVersion=%s %sDeleted=%s %sHash=%s"%(k,"|".join(f.get("version") or []),k,f.get("deleted"),k,f.get("blocksHash")),end=" ")
+print()' <<<"$response" >>"$diagnostics/conflict-index-versions.log" 2>&1 || true
+				done
+			done
+		fi
 	fi
 
 	printf '\nE2E failure diagnostics (API keys and config XML omitted):\n' >&2
-	for name in summary.log docker-peer-state.log docker-conflict-files.log app-folder-status.log app-connections.log app-system-errors.log app-conflict-file.log peer-folder-status.log peer-connections.log peer-system-errors.log peer-conflict-file.log; do
+	for name in summary.log docker-peer-state.log docker-conflict-files.log app-conflict-suffix-files.log peer-conflict-suffix-files.log app-conflict-suffix-hashes.log peer-conflict-suffix-hashes.log conflict-index-versions.log app-folder-status.log app-connections.log app-system-errors.log app-conflict-file.log peer-folder-status.log peer-connections.log peer-system-errors.log peer-conflict-file.log; do
 		if [[ -s "$diagnostics/$name" ]]; then
 			printf '\n--- %s ---\n' "$name" >&2
 			sed -n '1,120p' "$diagnostics/$name" >&2 || true
@@ -388,14 +437,18 @@ PEER_API_KEY="$("${DOCKER[@]}" exec "$CONTAINER_NAME" cat /var/syncthing/config/
 [[ -n "$PEER_API_KEY" ]] || fail "The Docker peer REST API key is missing."
 
 api_request() {
-	local base=$1 key=$2 method=$3 route=$4 body=${5:-}
+	local base=$1 key=$2 method=$3 route=$4 body=${5:-} timeout=${6:-}
+	local -a timeout_args=()
+	if [[ -n "$timeout" ]]; then
+		timeout_args=(--connect-timeout 2 --max-time "$timeout")
+	fi
 	if [[ -n "$body" ]]; then
 		printf 'header = "X-API-Key: %s"\n' "$key" |
-			curl --config - --noproxy '*' -fsS -X "$method" \
+			curl "${timeout_args[@]}" --config - --noproxy '*' -fsS -X "$method" \
 				-H 'Content-Type: application/json' --data-binary "$body" "$base$route"
 	else
 		printf 'header = "X-API-Key: %s"\n' "$key" |
-			curl --config - --noproxy '*' -fsS -X "$method" "$base$route"
+			curl "${timeout_args[@]}" --config - --noproxy '*' -fsS -X "$method" "$base$route"
 	fi
 }
 
