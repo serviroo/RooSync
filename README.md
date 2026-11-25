@@ -49,9 +49,10 @@ profile. It checks the starting pose's device ID and QR visibility, toolbar
 actions, add-device/add-folder forms, folder navigation, and logs export, and
 stores successful screenshots in the E2E result artifact. After the UI checks
 pass, the job also packages a separate unsigned arm64 Release artifact built
-with Xcode 27.1 and the iOS 27.1 SDK. This hosted check has not yet completed,
-so the Duo layout is not yet verified. An IPA built with Xcode 26.6 and the iOS
-26.5 SDK does not include the full native Duo presentation. The test does not
+with Xcode 27.1 and the iOS 27.1 SDK. Check the [latest hosted Duo workflow
+run](https://github.com/serviroo/RooSync/actions/workflows/ios.yml) for its
+current result; only the starting pose is covered. An IPA built with Xcode 26.6
+and the iOS 26.5 SDK does not include the full native Duo presentation. The test does not
 automate opening, closing, folding, or rotating the simulator; those transitions
 and physical-device behavior remain unverified.
 

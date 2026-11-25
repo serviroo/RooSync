@@ -91,7 +91,9 @@ final class RooSyncUITests: XCTestCase {
         attachScreenshot(named: "Duo-folder-sharing")
 
         app.buttons["Settings"].tap()
-        let logsLink = app.staticTexts["Syncthing logs"]
+        let logsLink = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Syncthing logs")
+        ).firstMatch
         XCTAssertTrue(logsLink.waitForExistence(timeout: 15))
         logsLink.tap()
         let exportLogs = app.buttons["Export logs"]
@@ -141,7 +143,9 @@ final class RooSyncUITests: XCTestCase {
         idField.typeText(ownDeviceID.label)
 
         XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
-        let addButton = app.navigationBars["Add device"].buttons["Add"]
+        let addButton = app.navigationBars["Add device"].buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Add")
+        ).firstMatch
         XCTAssertTrue(addButton.waitForExistence(timeout: 15))
         XCTAssertFalse(addButton.isEnabled)
     }
@@ -157,7 +161,9 @@ final class RooSyncUITests: XCTestCase {
 
         let folderList = app.collectionViews.firstMatch
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
-        let pairedDevice = app.staticTexts["Docker Syncthing E2E"]
+        let pairedDevice = folderList.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@", "Docker Syncthing E2E")
+        ).firstMatch
         for _ in 0..<8 where !pairedDevice.isHittable {
             folderList.swipeUp()
         }

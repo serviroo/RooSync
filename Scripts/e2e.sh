@@ -911,8 +911,8 @@ wait_for_file "$DESKTOP_FOLDER/Extensionless conflict (conflict copy)" "kept ext
 wait_for_file "$DESKTOP_FOLDER/Legacy note (conflict copy).md" "kept legacy Markdown conflict copy on the Docker peer"
 wait_for_file "$DESKTOP_FOLDER/Legacy extensionless (conflict copy)" "kept legacy extensionless conflict copy on the Docker peer"
 for _ in $(seq 1 90); do
-	APP_CONFLICT="$(find "$APP_FOLDER" -type f -name '*sync-conflict-*' -print -quit)"
-	PEER_CONFLICT="$(find "$DESKTOP_FOLDER" -type f -name '*sync-conflict-*' -print -quit)"
+	APP_CONFLICT="$(find "$APP_FOLDER" -type f -name '*sync-conflict-*' ! -name '.syncthing.*.tmp' -print -quit)"
+	PEER_CONFLICT="$(find "$DESKTOP_FOLDER" -type f -name '*sync-conflict-*' ! -name '.syncthing.*.tmp' -print -quit)"
 	[[ -z "$APP_CONFLICT" && -z "$PEER_CONFLICT" ]] && break
 	sleep 1
 done
