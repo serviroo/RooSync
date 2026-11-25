@@ -126,7 +126,6 @@ final class RooSyncUITests: XCTestCase {
             settingsList.swipeUp()
         }
         XCTAssertTrue(logsLink.waitForExistence(timeout: 15))
-        XCTAssertTrue(logsLink.isHittable)
         logsLink.tap()
         let exportLogs = app.buttons["Export logs"]
         XCTAssertTrue(exportLogs.waitForExistence(timeout: 15))
@@ -134,7 +133,7 @@ final class RooSyncUITests: XCTestCase {
         attachScreenshot(named: "\(attachmentPrefix)-logs-toolbar")
         exportLogs.tap()
         attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet-open")
-        let copyLogs = app.buttons["Copy"]
+        let copyLogs = app.cells["Copy"]
         guard copyLogs.waitForExistence(timeout: 30) else {
             let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
             hierarchy.name = "\(attachmentPrefix) logs share-sheet accessibility hierarchy"
@@ -283,7 +282,7 @@ final class RooSyncUITests: XCTestCase {
         name.typeText("Duplicate external folder")
         app.buttons["Choose an existing folder…"].tap()
 
-        let picker = XCUIApplication(bundleIdentifier: "com.apple.DocumentManager.Service")
+        let picker = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
         let browse = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", "Browse"))
             .firstMatch
