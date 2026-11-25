@@ -720,6 +720,13 @@ collect(report.get("testNodes", []))
 if results != ["Passed"]:
     raise SystemExit(f"Expected the Duo layout test to pass exactly once, found {results}")
 PY
+	duo_screenshot_dir="$E2E_DIR/DuoScreenshots"
+	mkdir -p "$duo_screenshot_dir"
+	xcrun xcresulttool export attachments \
+		--path "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" \
+		--output-path "$duo_screenshot_dir"
+	duo_screenshot="$(find "$duo_screenshot_dir" -type f -name '*.png' -print -quit)"
+	[[ -n "$duo_screenshot" ]] || fail "Duo UI test passed but no PNG attachments were exported."
 	printf '%s\n' 'PASS: exact-profile focused Duo UI tests passed.'
 	exit 0
 fi
