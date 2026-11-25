@@ -32,15 +32,19 @@ struct ContentView: View {
     }
 }
 
+private struct FolderSelection: Hashable {
+    let folderID: String
+}
+
 private struct FolderListView: View {
     @StateObject private var store = SyncStore.shared
     @State private var showingAddDevice = false
     @State private var showingAddFolder = false
-    @State private var selectedFolderID: String?
+    @State private var selectedFolder: FolderSelection?
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selectedFolderID) {
+            List(selection: $selectedFolder) {
                 Section("This device") {
                     DeviceIdentityView(deviceID: store.deviceID)
                 }
@@ -88,7 +92,7 @@ private struct FolderListView: View {
                         ContentUnavailableView("No folders yet", systemImage: "folder.badge.plus", description: Text("Add a folder to start syncing."))
                     }
                     ForEach(store.folders) { folder in
-                        NavigationLink(value: folder.id) {
+                        NavigationLink(value: FolderSelection(folderID: folder.id)) {
                             FolderRow(folder: folder, status: store.statuses[folder.id], conflicts: store.conflicts(in: folder).count)
                         }
                     }
@@ -125,9 +129,9 @@ private struct FolderListView: View {
                 }
             }
         } detail: {
-            if let selectedFolderID {
-                FolderDetailView(folderID: selectedFolderID)
-                    .id(selectedFolderID)
+            if let selectedFolder {
+                FolderDetailView(folderID: selectedFolder.folderID)
+                    .id(selectedFolder)
             } else {
                 ContentUnavailableView(
                     "Select a folder",

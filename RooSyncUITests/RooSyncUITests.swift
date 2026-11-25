@@ -64,6 +64,19 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(accept.waitForExistence(timeout: 60))
         accept.tap()
         XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
+
+        let pairedDevice = app.staticTexts["Docker Syncthing E2E"]
+        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
+        let folderList = app.collectionViews.firstMatch
+        for _ in 0..<8 where !pairedDevice.isHittable {
+            folderList.swipeUp()
+        }
+        XCTAssertTrue(pairedDevice.isHittable)
+        pairedDevice.tap()
+        XCTAssertFalse(
+            app.staticTexts["Folder unavailable"].waitForExistence(timeout: 2),
+            "Tapping a paired device must not select a folder detail."
+        )
     }
 
     @MainActor
