@@ -44,6 +44,7 @@ final class RooSyncUITests: XCTestCase {
         let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
         XCTAssertTrue(idField.waitForExistence(timeout: 15))
         idField.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "The device ID field did not receive keyboard focus.")
         idField.typeText(ownDeviceID.label)
 
         XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
@@ -129,14 +130,13 @@ final class RooSyncUITests: XCTestCase {
         app.buttons["Choose an existing folder…"].tap()
 
         let browse = app.buttons["Browse"]
-        if browse.waitForExistence(timeout: 5) { browse.tap() }
-        let onMyIPhone = app.staticTexts["On My iPhone"]
-        XCTAssertTrue(onMyIPhone.waitForExistence(timeout: 15))
-        onMyIPhone.tap()
-        let appFolder = app.cells.matching(identifier: "RooSync, Container").firstMatch
-        XCTAssertTrue(appFolder.waitForExistence(timeout: 15))
-        appFolder.tap()
-        let vaults = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Vaults")).firstMatch
+        if browse.waitForExistence(timeout: 5), !browse.isSelected { browse.tap() }
+        let vaults = app.cells.matching(identifier: "Vaults, Folder").firstMatch
+        if !vaults.exists {
+            let appFolder = app.cells.matching(identifier: "RooSync, Container").firstMatch
+            XCTAssertTrue(appFolder.waitForExistence(timeout: 15))
+            appFolder.tap()
+        }
         XCTAssertTrue(vaults.waitForExistence(timeout: 15))
         vaults.tap()
         let candidate = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault")).firstMatch

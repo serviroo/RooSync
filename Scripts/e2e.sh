@@ -22,9 +22,123 @@ DOCKER=()
 
 mkdir -p "$E2E_DIR"
 
+print_xcresult_failure_diagnostics() {
+	local result_bundle=$1 name=$2
+	[[ -f "$result_bundle/Info.plist" ]] || return 0
+	python3 - "$result_bundle" "$E2E_DIR/failure-diagnostics/$name" <<'PY' 2>&1 | tee "$E2E_DIR/failure-diagnostics/$name-xcresult.log" >&2
+import json
+import os
+import re
+import subprocess
+import sys
+
+result_path, output_dir = sys.argv[1:]
+os.makedirs(output_dir, exist_ok=True)
+
+def xcresult(*args, timeout=30):
+	return subprocess.run(
+		["xcrun", "xcresulttool", *args], capture_output=True, text=True, timeout=timeout
+	)
+
+def sanitize(value):
+	value = re.sub(r"\b[A-Z2-7]{7}(?:-[A-Z2-7]{7}){7}\b", "[REDACTED_DEVICE_ID]", value)
+	return re.sub(r"(?i)(Type )'[^']{24,}'", r"\1'[REDACTED_INPUT]'", value)
+
+try:
+	tests = xcresult("get", "test-results", "tests", "--path", result_path, "--compact")
+	if tests.returncode:
+		print("xcresult test summary unavailable")
+		raise SystemExit(0)
+	test_report = json.loads(tests.stdout)
+except (OSError, subprocess.SubprocessError, ValueError) as error:
+	print(f"xcresult test summary unavailable: {error}")
+	raise SystemExit(0)
+
+failed = []
+def collect(node):
+	if isinstance(node, dict):
+		if node.get("nodeType") == "Test Case" and node.get("result") == "Failed":
+			failed.append((node.get("nodeIdentifierURL", ""), node.get("name", "failed test")))
+		for child in node.values():
+			collect(child)
+	elif isinstance(node, list):
+		for child in node:
+			collect(child)
+
+collect(test_report.get("testNodes", []))
+for test_id, test_name in failed[:6]:
+	if not test_id:
+		continue
+	print(f"\n--- xcresult failed test: {sanitize(test_name)} ---")
+	try:
+		activities = xcresult(
+			"get", "test-results", "activities", "--path", result_path,
+			"--test-id", test_id, "--compact"
+		)
+		activity_report = json.loads(activities.stdout) if activities.returncode == 0 else {}
+	except (OSError, subprocess.SubprocessError, ValueError):
+		activity_report = {}
+	titles = []
+	def collect_titles(node):
+		if isinstance(node, dict):
+			for key in ("title", "name", "activityTitle"):
+				value = node.get(key)
+				if isinstance(value, str):
+					titles.append(sanitize(value))
+			for child in node.values():
+				collect_titles(child)
+		elif isinstance(node, list):
+			for child in node:
+				collect_titles(child)
+	collect_titles(activity_report)
+	for title in titles[-40:]:
+		print(f"[activity] {title[:180]}")
+
+attachment_dir = os.path.join(output_dir, "attachments")
+os.makedirs(attachment_dir, exist_ok=True)
+try:
+	exported = xcresult(
+		"export", "attachments", "--path", result_path,
+		"--output-path", attachment_dir, "--only-failures", timeout=60
+	)
+	manifest_path = os.path.join(attachment_dir, "manifest.json")
+	manifest = json.load(open(manifest_path)) if exported.returncode == 0 and os.path.isfile(manifest_path) else []
+except (OSError, subprocess.SubprocessError, ValueError):
+	manifest = []
+
+for test in manifest:
+	for attachment in test.get("attachments", []):
+		name = attachment.get("suggestedHumanReadableName", "")
+		filename = attachment.get("exportedFileName", "")
+		if not (name.startswith("Complete Issue Description") or name.startswith("App UI hierarchy")):
+			continue
+		path = os.path.join(attachment_dir, filename)
+		try:
+			with open(path, encoding="utf-8", errors="replace") as attachment_file:
+				lines = attachment_file.read().splitlines()
+		except OSError:
+			continue
+		print(f"--- {sanitize(name)} ---")
+		if name.startswith("Complete Issue Description"):
+			print("\n".join(sanitize(line) for line in lines[:35]))
+			continue
+		pattern = re.compile(r"Browse View \(Picker\)|DOC\.browsingRoot|BackButton|On My iPhone|Vaults, Folder|device-id-entry|Add device|Keyboard", re.I)
+		selected = set()
+		for index, line in enumerate(lines):
+			if pattern.search(line):
+				selected.update(range(max(0, index - 1), min(len(lines), index + 2)))
+		if not selected:
+			selected.update(range(min(len(lines), 35)))
+		for index in sorted(selected)[:80]:
+			print(sanitize(lines[index])[:240])
+PY
+}
+
 capture_failure_diagnostics() {
 	local diagnostics="$E2E_DIR/failure-diagnostics"
 	mkdir -p "$diagnostics"
+	print_xcresult_failure_diagnostics "$E2E_DIR/RooSync-E2E.xcresult" ui
+	print_xcresult_failure_diagnostics "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" pending-collision
 	{
 		printf 'run_id=%s\n' "$RUN_ID"
 		printf 'simulator_udid=%s\n' "${SIMULATOR_UDID:-unavailable}"
