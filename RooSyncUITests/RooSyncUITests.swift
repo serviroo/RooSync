@@ -239,8 +239,15 @@ final class RooSyncUITests: XCTestCase {
         let pendingFolderAccepts = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "accept-folder-"))
         XCTAssertEqual(pendingFolderAccepts.count, 0)
 
-        let configuredFolder = app.staticTexts["RooSync E2E Vault"]
+        let folderList = app.collectionViews.firstMatch
+        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
+        let configuredFolder = app.buttons["folder-row-roosync-e2e-vault"]
+        for _ in 0..<8 {
+            if configuredFolder.exists && configuredFolder.isHittable { break }
+            folderList.swipeUp()
+        }
         XCTAssertTrue(configuredFolder.waitForExistence(timeout: 30))
+        XCTAssertTrue(configuredFolder.isHittable)
         configuredFolder.tap()
         let refreshedStatus = app.staticTexts.matching(
             NSPredicate(format: "label BEGINSWITH %@", "State, ")
