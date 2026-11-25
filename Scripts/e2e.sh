@@ -440,13 +440,17 @@ PEER_GID="$(id -g)"
 	-p "127.0.0.1:$PEER_SYNC_PORT:22000/udp" \
 	"$PEER_IMAGE" >/dev/null
 
-for _ in $(seq 1 90); do
-	if curl --noproxy '*' -fsS "$PEER_REST/rest/noauth/health" >/dev/null 2>&1; then
+PEER_REST_READY_TIMEOUT_SECONDS=300
+peer_rest_deadline=$((SECONDS + PEER_REST_READY_TIMEOUT_SECONDS))
+peer_rest_ready=false
+while (( SECONDS < peer_rest_deadline )); do
+	if curl --noproxy '*' --connect-timeout 2 --max-time 2 -fsS "$PEER_REST/rest/noauth/health" >/dev/null 2>&1; then
+		peer_rest_ready=true
 		break
 	fi
 	sleep 2
 done
-curl --noproxy '*' -fsS "$PEER_REST/rest/noauth/health" >/dev/null || fail "Docker Syncthing REST API did not start on 127.0.0.1:8385."
+[[ "$peer_rest_ready" == true ]] || fail "Docker Syncthing REST API did not start on 127.0.0.1:8385 within ${PEER_REST_READY_TIMEOUT_SECONDS}s."
 PEER_API_KEY="$("${DOCKER[@]}" exec "$CONTAINER_NAME" cat /var/syncthing/config/config.xml | python3 -c 'import sys,xml.etree.ElementTree as ET; node=ET.fromstring(sys.stdin.read()).find("./gui/apikey"); print(node.text if node is not None and node.text else "")')"
 [[ -n "$PEER_API_KEY" ]] || fail "The Docker peer REST API key is missing."
 
@@ -848,6 +852,7 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-only-testing:RooSyncUITests/RooSyncUITests/testPauseE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testResumeE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testConflictCopyCanBeKept \
+	-only-testing:RooSyncUITests/RooSyncUITests/testLogsExportRendersCopyActionOnOrdinarySimulator \
 	-resultBundlePath "$E2E_DIR/RooSync-E2E.xcresult" >"$E2E_DIR/test.log" 2>&1 || {
 	grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/test.log" | tail -80 >&2 || true
 	fail "Simulator UI E2E failed; see $E2E_DIR/test.log."

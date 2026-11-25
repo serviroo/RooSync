@@ -283,63 +283,64 @@ final class RooSyncUITests: XCTestCase {
         name.typeText("Duplicate external folder")
         app.buttons["Choose an existing folder…"].tap()
 
-        let browse = app.descendants(matching: .any)
+        let picker = XCUIApplication(bundleIdentifier: "com.apple.DocumentManager.Service")
+        let browse = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", "Browse"))
             .firstMatch
         guard browse.waitForExistence(timeout: 30) else {
-            attachDocumentPickerDiagnostics(in: app, state: "Browse-unavailable")
-            XCTFail("The host app's folder picker did not expose Browse from Recents.")
+            attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Browse-unavailable")
+            XCTFail("The active document manager picker did not expose Browse from Recents.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, state: "Recents")
+        attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Recents")
         if !browse.isSelected { browse.tap() }
 
-        let onMyIPhone = app.descendants(matching: .any)
+        let onMyIPhone = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", "On My iPhone"))
             .firstMatch
         guard onMyIPhone.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, state: "On-My-iPhone-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: picker, state: "On-My-iPhone-unavailable")
             XCTFail("Browse did not expose On My iPhone.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, state: "Browse")
+        attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Browse")
         onMyIPhone.tap()
 
-        let rooSyncContainer = app.descendants(matching: .any)
+        let rooSyncContainer = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync"))
             .firstMatch
         guard rooSyncContainer.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, state: "RooSync-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: picker, state: "RooSync-unavailable")
             XCTFail("On My iPhone did not expose the RooSync container.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, state: "On-My-iPhone")
+        attachDocumentPickerDiagnostics(in: app, picker: picker, state: "On-My-iPhone")
         rooSyncContainer.tap()
 
-        let vaults = app.descendants(matching: .any)
+        let vaults = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", "Vaults"))
             .firstMatch
         guard vaults.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, state: "Vaults-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Vaults-unavailable")
             XCTFail("The RooSync container did not expose Vaults.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, state: "RooSync")
+        attachDocumentPickerDiagnostics(in: app, picker: picker, state: "RooSync")
         vaults.tap()
 
-        let candidate = app.descendants(matching: .any)
+        let candidate = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault"))
             .firstMatch
         guard candidate.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, state: "Vault-candidate-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Vault-candidate-unavailable")
             XCTFail("Vaults did not expose the RooSync E2E Vault folder.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, state: "Vaults")
+        attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Vaults")
         candidate.tap()
-        let open = app.buttons["Open"]
+        let open = picker.buttons["Open"]
         guard open.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, state: "Open-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: picker, state: "Open-unavailable")
             XCTFail("The selected vault did not expose Open.")
             return
         }
@@ -467,11 +468,15 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func attachDocumentPickerDiagnostics(in app: XCUIApplication, state: String) {
-        let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
+    private func attachDocumentPickerDiagnostics(in app: XCUIApplication, picker: XCUIApplication, state: String) {
+        let hierarchy = XCTAttachment(string: "Process state: \(picker.state.rawValue)\n\(picker.debugDescription.prefix(20000))")
         hierarchy.name = "Document picker \(state) accessibility hierarchy"
         hierarchy.lifetime = .keepAlways
         add(hierarchy)
+        let hostHierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
+        hostHierarchy.name = "Host app \(state) accessibility hierarchy"
+        hostHierarchy.lifetime = .keepAlways
+        add(hostHierarchy)
         attachScreenshot(named: "Document picker \(state)")
     }
 
