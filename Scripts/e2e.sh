@@ -177,6 +177,9 @@ capture_failure_diagnostics() {
 		xcrun simctl spawn "$SIMULATOR_UDID" log show --last 10m --style compact \
 			--predicate 'process CONTAINS[c] "RooSync" OR subsystem CONTAINS[c] "com.rooindustries.roosync"' \
 			>"$diagnostics/roosync-simulator.log" 2>&1 || true
+		xcrun simctl spawn "$SIMULATOR_UDID" log show --last 10m --style compact \
+			--predicate 'process == "sharingd" OR process == "lsd" OR process CONTAINS[c] "share" OR process CONTAINS[c] "activity" OR subsystem CONTAINS[c] "com.apple.sharing" OR subsystem CONTAINS[c] "LaunchServices"' \
+			>"$diagnostics/sharing-services-simulator.log" 2>&1 || true
 	fi
 
 	if ((${#DOCKER[@]})); then
@@ -264,6 +267,10 @@ print()' <<<"$response" >>"$diagnostics/conflict-index-versions.log" 2>&1 || tru
 	if [[ -s "$diagnostics/roosync-simulator.log" ]]; then
 		printf '\n--- Simulator relevant logs ---\n' >&2
 		grep -iE 'error|warning|failed|marker|conflict|folder|scan' "$diagnostics/roosync-simulator.log" | tail -80 >&2 || true
+	fi
+	if [[ -s "$diagnostics/sharing-services-simulator.log" ]]; then
+		printf '\n--- Sharing-service and LaunchServices diagnostics ---\n' >&2
+		grep -iE 'error|warning|fault|crash|terminat|launch|denied|share|activity|service|timeout|invalid' "$diagnostics/sharing-services-simulator.log" | tail -100 >&2 || true
 	fi
 	if [[ -s "$diagnostics/simulator-lifecycle.log" ]]; then
 		printf '\n--- Bounded simulator crash/termination diagnostics ---\n' >&2

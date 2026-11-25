@@ -100,6 +100,19 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Share folder"].waitForExistence(timeout: 15))
         attachScreenshot(named: "Duo-folder-sharing")
 
+        verifyLogsExportCopyAction(in: app, attachmentPrefix: "Duo")
+    }
+
+    @MainActor
+    func testLogsExportRendersCopyActionOnOrdinarySimulator() {
+        let app = XCUIApplication()
+        app.launch()
+
+        verifyLogsExportCopyAction(in: app, attachmentPrefix: "Ordinary")
+    }
+
+    @MainActor
+    private func verifyLogsExportCopyAction(in app: XCUIApplication, attachmentPrefix: String) {
         app.buttons["Settings"].tap()
         let settingsList = app.collectionViews.firstMatch
         XCTAssertTrue(settingsList.waitForExistence(timeout: 15))
@@ -118,20 +131,20 @@ final class RooSyncUITests: XCTestCase {
         let exportLogs = app.buttons["Export logs"]
         XCTAssertTrue(exportLogs.waitForExistence(timeout: 15))
         XCTAssertTrue(exportLogs.isHittable)
-        attachScreenshot(named: "Duo-logs-toolbar")
+        attachScreenshot(named: "\(attachmentPrefix)-logs-toolbar")
         exportLogs.tap()
-        attachScreenshot(named: "Duo-logs-share-sheet-open")
+        attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet-open")
         let copyLogs = app.buttons["Copy"]
         guard copyLogs.waitForExistence(timeout: 30) else {
             let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
-            hierarchy.name = "Duo logs share-sheet accessibility hierarchy"
+            hierarchy.name = "\(attachmentPrefix) logs share-sheet accessibility hierarchy"
             hierarchy.lifetime = .keepAlways
             add(hierarchy)
-            attachScreenshot(named: "Duo-logs-share-sheet-empty")
+            attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet-empty")
             XCTFail("Export logs did not render a Copy action within 30 seconds.")
             return
         }
-        attachScreenshot(named: "Duo-logs-share-sheet")
+        attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet")
         copyLogs.tap()
     }
 
