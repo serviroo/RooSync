@@ -650,10 +650,40 @@ fi
 if [[ "${ROOSYNC_DUO_LAYOUT_TESTS:-0}" == 1 ]]; then
 	xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 	APP_INSTALLED=1
-	ROOSYNC_DUO_LAYOUT_TESTS=1 ROOSYNC_DUO_SIMULATOR_VERIFIED=1 \
-		xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+	xctestrun_file="$(find "$DERIVED_DATA/Build/Products" -maxdepth 1 -type f -name '*.xctestrun' -print -quit)"
+	[[ -n "$xctestrun_file" ]] || fail "Duo tests require the generated Xcode test run specification."
+	python3 - "$xctestrun_file" <<'PY' || fail "Could not configure Duo variables in the Xcode test run specification."
+import plistlib
+import sys
+
+path = sys.argv[1]
+with open(path, "rb") as source:
+    specification = plistlib.load(source)
+
+test_targets = []
+def collect_targets(node):
+    if isinstance(node, dict):
+        if node.get("BlueprintName") == "RooSyncUITests":
+            test_targets.append(node)
+        for child in node.values():
+            collect_targets(child)
+    elif isinstance(node, list):
+        for child in node:
+            collect_targets(child)
+
+collect_targets(specification)
+if len(test_targets) != 1:
+    raise SystemExit(f"Expected one RooSyncUITests target in xctestrun, found {len(test_targets)}")
+
+environment = test_targets[0].setdefault("TestingEnvironmentVariables", {})
+environment["ROOSYNC_DUO_LAYOUT_TESTS"] = "1"
+environment["ROOSYNC_DUO_SIMULATOR_VERIFIED"] = "1"
+with open(path, "wb") as destination:
+    plistlib.dump(specification, destination)
+PY
+		xcodebuild -xctestrun "$xctestrun_file" \
 		-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
-		-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+		-parallel-testing-enabled NO \
 		-maximum-concurrent-test-simulator-destinations 1 \
 		CODE_SIGNING_ALLOWED=NO test-without-building \
 		-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
