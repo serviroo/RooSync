@@ -43,8 +43,12 @@ final class RooSyncUITests: XCTestCase {
 
         let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
         XCTAssertTrue(idField.waitForExistence(timeout: 15))
-        idField.tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "The device ID field did not receive keyboard focus.")
+        idField.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let keyboardAppeared = app.keyboards.firstMatch.waitForExistence(timeout: 5)
+        if !keyboardAppeared {
+            attachKeyboardFocusFailureDiagnostics(in: app, field: idField)
+        }
+        XCTAssertTrue(keyboardAppeared, "The device ID field did not receive keyboard focus.")
         idField.typeText(ownDeviceID.label)
 
         XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
@@ -255,6 +259,29 @@ final class RooSyncUITests: XCTestCase {
         let addMenu = app.buttons["Add"]
         XCTAssertTrue(addMenu.waitForExistence(timeout: 30))
         addMenu.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    @MainActor
+    private func attachKeyboardFocusFailureDiagnostics(in app: XCUIApplication, field: XCUIElement) {
+        let keyboard = app.keyboards.firstMatch
+        let state = """
+        appState=\(app.state)
+        fieldExists=\(field.exists)
+        fieldHittable=\(field.isHittable)
+        keyboardExists=\(keyboard.exists)
+        """
+
+        let stateAttachment = XCTAttachment(string: String(state.prefix(2048)))
+        stateAttachment.name = "Self-add keyboard focus state"
+        add(stateAttachment)
+
+        let hierarchyAttachment = XCTAttachment(string: String(app.debugDescription.prefix(12000)))
+        hierarchyAttachment.name = "Self-add failure-time UI hierarchy"
+        add(hierarchyAttachment)
+
+        let screenshotAttachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshotAttachment.name = "Self-add failure-time screenshot"
+        add(screenshotAttachment)
     }
 
     @MainActor

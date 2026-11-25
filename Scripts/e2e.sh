@@ -110,7 +110,12 @@ for test in manifest:
 	for attachment in test.get("attachments", []):
 		name = attachment.get("suggestedHumanReadableName", "")
 		filename = attachment.get("exportedFileName", "")
-		if not (name.startswith("Complete Issue Description") or name.startswith("App UI hierarchy")):
+		if not (
+			name.startswith("Complete Issue Description")
+			or name.startswith("App UI hierarchy")
+			or name.startswith("Self-add failure-time UI hierarchy")
+			or name.startswith("Self-add keyboard focus state")
+		):
 			continue
 		path = os.path.join(attachment_dir, filename)
 		try:
@@ -121,6 +126,9 @@ for test in manifest:
 		print(f"--- {sanitize(name)} ---")
 		if name.startswith("Complete Issue Description"):
 			print("\n".join(sanitize(line) for line in lines[:35]))
+			continue
+		if name.startswith("Self-add keyboard focus state"):
+			print("\n".join(sanitize(line)[:240] for line in lines[:12]))
 			continue
 		pattern = re.compile(r"Browse View \(Picker\)|DOC\.browsingRoot|BackButton|On My iPhone|Vaults, Folder|device-id-entry|Add device|Keyboard", re.I)
 		selected = set()
@@ -139,6 +147,7 @@ capture_failure_diagnostics() {
 	mkdir -p "$diagnostics"
 	print_xcresult_failure_diagnostics "$E2E_DIR/RooSync-E2E.xcresult" ui
 	print_xcresult_failure_diagnostics "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" pending-collision
+	print_xcresult_failure_diagnostics "$E2E_DIR/FocusedSelfAddAndOffer-E2E.xcresult" focused-ui
 	{
 		printf 'run_id=%s\n' "$RUN_ID"
 		printf 'simulator_udid=%s\n' "${SIMULATOR_UDID:-unavailable}"
@@ -148,6 +157,11 @@ capture_failure_diagnostics() {
 	} >"$diagnostics/summary.log" 2>&1
 
 	if [[ -n "${SIMULATOR_UDID:-}" ]]; then
+		xcrun simctl spawn "$SIMULATOR_UDID" log show --last 5m --style compact \
+			--predicate 'process == "runningboardd" OR process == "SpringBoard" OR process == "ReportCrash" OR process == "crashreporterd"' \
+		2>&1 | grep -iE 'RooSync|com\.rooindustries\.roosync' | \
+		grep -iE 'terminat|crash|signal|kill|jetsam|watchdog|memory|exit|launch' | tail -80 \
+			>"$diagnostics/simulator-lifecycle.log" || true
 		xcrun simctl spawn "$SIMULATOR_UDID" log show --last 10m --style compact \
 			--predicate 'process CONTAINS[c] "RooSync" OR subsystem CONTAINS[c] "com.rooindustries.roosync"' \
 			>"$diagnostics/roosync-simulator.log" 2>&1 || true
@@ -201,6 +215,10 @@ capture_failure_diagnostics() {
 		printf '\n--- Simulator relevant logs ---\n' >&2
 		grep -iE 'error|warning|failed|marker|conflict|folder|scan' "$diagnostics/roosync-simulator.log" | tail -80 >&2 || true
 	fi
+	if [[ -s "$diagnostics/simulator-lifecycle.log" ]]; then
+		printf '\n--- Bounded simulator crash/termination diagnostics ---\n' >&2
+		cat "$diagnostics/simulator-lifecycle.log" >&2
+	fi
 	if [[ -s "$E2E_DIR/lima-forward.log" ]]; then
 		printf '\n--- Lima forwarding log ---\n' >&2
 		tail -50 "$E2E_DIR/lima-forward.log" >&2 || true
@@ -217,6 +235,10 @@ cleanup() {
 		xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 	fi
 	if [[ -n "$TUNNEL_PID" ]]; then
+		if [[ -n "${LIMA_HOME:-}" && -f "$LIMA_HOME/colima/ssh.config" ]]; then
+			ssh -F "$LIMA_HOME/colima/ssh.config" -O cancel -L 127.0.0.1:8385:127.0.0.1:8385 lima-colima >/dev/null 2>&1 || true
+			ssh -F "$LIMA_HOME/colima/ssh.config" -O cancel -L "127.0.0.1:$PEER_SYNC_PORT:127.0.0.1:$PEER_SYNC_PORT" lima-colima >/dev/null 2>&1 || true
+		fi
 		kill "$TUNNEL_PID" >/dev/null 2>&1 || true
 	fi
 	if ((${#DOCKER[@]})); then
@@ -560,6 +582,24 @@ if [[ "${ROOSYNC_E2E_ONLY_PENDING_COLLISION:-0}" == 1 ]]; then
 	[[ "$PENDING_OFFER_READY" == true ]] || fail "The first Unicode-equivalent pending offer did not reach the simulator."
 	run_pending_folder_collision_test
 	printf '%s\n' 'PASS: pending-ID collisions fail closed while configured status and policy refresh.'
+	exit 0
+fi
+
+if [[ "${ROOSYNC_FOCUSED_UI_TESTS:-0}" == 1 ]]; then
+	xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+	APP_INSTALLED=1
+	xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+		-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+		-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+		-maximum-concurrent-test-simulator-destinations 1 \
+		CODE_SIGNING_ALLOWED=NO test-without-building \
+		-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
+		-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingOfferForExistingFolderSharesWithoutReplacingIt \
+		-resultBundlePath "$E2E_DIR/FocusedSelfAddAndOffer-E2E.xcresult" >"$E2E_DIR/focused-ui-test.log" 2>&1 || {
+		grep -nE 'error:|failed|Failure|TEST FAILED|signal kill' "$E2E_DIR/focused-ui-test.log" | tail -80 >&2 || true
+		fail "Focused self-add/offer UI tests failed; see $E2E_DIR/focused-ui-test.log."
+	}
+	printf '%s\n' 'PASS: focused self-add and existing-folder-offer UI tests passed.'
 	exit 0
 fi
 
