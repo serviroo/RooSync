@@ -36,10 +36,11 @@ private struct FolderListView: View {
     @StateObject private var store = SyncStore.shared
     @State private var showingAddDevice = false
     @State private var showingAddFolder = false
+    @State private var selectedFolderID: String?
 
     var body: some View {
-        NavigationStack {
-            List {
+        NavigationSplitView {
+            List(selection: $selectedFolderID) {
                 Section("This device") {
                     DeviceIdentityView(deviceID: store.deviceID)
                 }
@@ -55,7 +56,10 @@ private struct FolderListView: View {
                             HStack {
                                 VStack(alignment: .leading) {
                                     Text(device.name)
-                                    Text(device.id).font(.caption.monospaced()).lineLimit(1)
+                                    Text(device.id)
+                                        .font(.caption.monospaced())
+                                        .textSelection(.enabled)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer()
                                 Button("Accept") { Task { await store.accept(device) } }
@@ -84,9 +88,7 @@ private struct FolderListView: View {
                         ContentUnavailableView("No folders yet", systemImage: "folder.badge.plus", description: Text("Add a folder to start syncing."))
                     }
                     ForEach(store.folders) { folder in
-                        NavigationLink {
-                            FolderDetailView(folderID: folder.id)
-                        } label: {
+                        NavigationLink(value: folder.id) {
                             FolderRow(folder: folder, status: store.statuses[folder.id], conflicts: store.conflicts(in: folder).count)
                         }
                     }
@@ -99,30 +101,43 @@ private struct FolderListView: View {
                     ForEach(store.devices) { device in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(device.name)
-                            Text(device.deviceID).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+                            Text(device.deviceID)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
             }
             .navigationTitle("RooSync")
             .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .primaryAction) {
                     Button { Task { await store.syncNow() } } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
+                        Label("Sync now", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .accessibilityLabel("Sync now")
                     Menu {
                         Button("Add app folder", systemImage: "folder.badge.plus") { showingAddFolder = true }
                         Button("Add device", systemImage: "plus.viewfinder") { showingAddDevice = true }
                     } label: {
-                        Image(systemName: "plus")
+                        Label("Add", systemImage: "plus")
                     }
-                    .accessibilityLabel("Add")
                 }
             }
-            .sheet(isPresented: $showingAddDevice) { AddDeviceView() }
-            .sheet(isPresented: $showingAddFolder) { AddFolderView() }
+        } detail: {
+            if let selectedFolderID {
+                FolderDetailView(folderID: selectedFolderID)
+                    .id(selectedFolderID)
+            } else {
+                ContentUnavailableView(
+                    "Select a folder",
+                    systemImage: "folder",
+                    description: Text("Choose a folder to view its status and settings.")
+                )
+            }
         }
+        .sheet(isPresented: $showingAddDevice) { AddDeviceView() }
+        .sheet(isPresented: $showingAddFolder) { AddFolderView() }
     }
 }
 
@@ -130,11 +145,29 @@ private struct DeviceIdentityView: View {
     let deviceID: String
 
     var body: some View {
-        HStack(spacing: 16) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                qrCode
+                identityDetails
+            }
+            .fixedSize(horizontal: true, vertical: false)
+
+            VStack(alignment: .leading, spacing: 12) {
+                qrCode
+                identityDetails
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 6)
+    }
+
+    private var qrCode: some View {
+        Group {
             if let image = makeQRCode(deviceID) {
                 Image(uiImage: image)
                     .interpolation(.none)
                     .resizable()
+                    .scaledToFit()
                     .frame(width: 88, height: 88)
                     .padding(8)
                     .background(Color.white)
@@ -145,24 +178,27 @@ private struct DeviceIdentityView: View {
                     .frame(width: 88, height: 88)
                     .foregroundStyle(.secondary)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Device ID").font(.headline)
-                if deviceID.isEmpty {
-                    ProgressView()
-                } else {
-                    Text(deviceID)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .lineLimit(3)
-                        .accessibilityIdentifier("device-id")
-                    ShareLink(item: deviceID) {
-                        Label("Share ID", systemImage: "square.and.arrow.up")
-                            .font(.subheadline)
-                    }
+        }
+    }
+
+    private var identityDetails: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Device ID").font(.headline)
+            if deviceID.isEmpty {
+                ProgressView()
+            } else {
+                Text(deviceID)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("device-id")
+                ShareLink(item: deviceID) {
+                    Label("Share ID", systemImage: "square.and.arrow.up")
+                        .font(.subheadline)
                 }
             }
         }
-        .padding(.vertical, 6)
     }
 
     private func makeQRCode(_ value: String) -> UIImage? {
@@ -246,9 +282,13 @@ private struct AddDeviceView: View {
             .navigationTitle("Add device")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
+                    Button {
                         Task {
                             do {
                                 try await store.addDevice(id: deviceID, name: name, address: address.isEmpty ? nil : address)
@@ -257,6 +297,8 @@ private struct AddDeviceView: View {
                                 store.report(error)
                             }
                         }
+                    } label: {
+                        Label("Add", systemImage: "plus")
                     }
                     .disabled(deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isLocalDeviceID(deviceID))
                 }
@@ -308,7 +350,11 @@ private struct AddFolderView: View {
             .navigationTitle("Add folder")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                }
             }
             .fileImporter(isPresented: $showingPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                 guard case let .success(urls) = result, let url = urls.first else { return }
@@ -651,9 +697,10 @@ private struct LogsView: View {
         }
         .navigationTitle("Syncthing logs")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                ShareLink(item: logs) { Image(systemName: "square.and.arrow.up") }
-                    .accessibilityLabel("Export logs")
+            ToolbarItem(placement: .primaryAction) {
+                ShareLink(item: logs) {
+                    Label("Export logs", systemImage: "square.and.arrow.up")
+                }
             }
         }
         .task {
@@ -679,7 +726,11 @@ private struct QRScannerView: View {
             .navigationTitle("Scan device QR")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { dismiss() } label: {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                }
             }
         }
     }

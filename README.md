@@ -33,10 +33,25 @@ REST API.
   discovery/relay settings, bandwidth, and cellular/battery policies.
 - Export Syncthing logs and trigger **Sync now** from Shortcuts.
 
+## iPhone Duo layout status
+
+The Folders tab uses an adaptive SwiftUI split view: folder details appear beside
+the list when the system provides enough space, and the navigation stack
+collapses on narrower layouts. The device identity section switches to a
+vertical layout when needed, keeps the QR code at a readable size, and wraps
+complete device IDs. Toolbar actions include both titles and symbols. These
+changes use APIs available at RooSync's iOS 18 deployment target.
+
+Apple identifies Xcode 27.1 or later with the iOS 27.1 SDK or later as necessary
+for the full native iPhone Duo presentation. Duo-specific simulator and device
+validation has not been performed, so RooSync's Duo layout is not yet verified.
+
 ## Install from source
 
-Requirements: macOS, Xcode 16 or newer with the iOS 18 SDK, Go 1.26+, and
-`xcodegen`. A free Apple Personal Team can sign and sideload the app from Xcode.
+Minimum source-build requirements: macOS, Xcode 16 or newer with the iOS 18 SDK,
+Go 1.26+, and `xcodegen`. For the full native iPhone Duo presentation, use
+Xcode 27.1 or newer with the iOS 27.1 SDK or later. A free Apple Personal Team
+can sign and sideload the app from Xcode.
 
 ```sh
 brew install go xcodegen
@@ -161,7 +176,7 @@ equivalent offer without sharing the unrelated existing folder. It also
 verified that canonical-equivalent pending IDs fail closed, pause/resume,
 two-way vault sync, modern and timestamp-only legacy Markdown and extensionless
 conflicts, and Keep-copy convergence on both peers. This simulator-only result
-is not a physical-device or Obsidian interoperability test.
+is not an iPhone Duo, physical-device, or Obsidian interoperability test.
 
 The workflow also builds an unsigned arm64 device product and publishes its app
 bundle, unsigned IPA, and source archive. The app bundle and source archive
