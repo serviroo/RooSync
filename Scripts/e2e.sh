@@ -438,17 +438,19 @@ PEER_API_KEY="$("${DOCKER[@]}" exec "$CONTAINER_NAME" cat /var/syncthing/config/
 
 api_request() {
 	local base=$1 key=$2 method=$3 route=$4 body=${5:-} timeout=${6:-}
-	local -a timeout_args=()
+	local -a curl_options
 	if [[ -n "$timeout" ]]; then
-		timeout_args=(--connect-timeout 2 --max-time "$timeout")
+		curl_options=(--connect-timeout 2 --max-time "$timeout" --config - --noproxy '*' -fsS -X "$method")
+	else
+		curl_options=(--config - --noproxy '*' -fsS -X "$method")
 	fi
 	if [[ -n "$body" ]]; then
 		printf 'header = "X-API-Key: %s"\n' "$key" |
-			curl "${timeout_args[@]}" --config - --noproxy '*' -fsS -X "$method" \
+			curl "${curl_options[@]}" \
 				-H 'Content-Type: application/json' --data-binary "$body" "$base$route"
 	else
 		printf 'header = "X-API-Key: %s"\n' "$key" |
-			curl "${timeout_args[@]}" --config - --noproxy '*' -fsS -X "$method" "$base$route"
+			curl "${curl_options[@]}" "$base$route"
 	fi
 }
 
