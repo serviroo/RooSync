@@ -120,8 +120,17 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(exportLogs.isHittable)
         attachScreenshot(named: "Duo-logs-toolbar")
         exportLogs.tap()
+        attachScreenshot(named: "Duo-logs-share-sheet-open")
         let copyLogs = app.buttons["Copy"]
-        XCTAssertTrue(copyLogs.waitForExistence(timeout: 15))
+        guard copyLogs.waitForExistence(timeout: 30) else {
+            let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
+            hierarchy.name = "Duo logs share-sheet accessibility hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            attachScreenshot(named: "Duo-logs-share-sheet-empty")
+            XCTFail("Export logs did not render a Copy action within 30 seconds.")
+            return
+        }
         attachScreenshot(named: "Duo-logs-share-sheet")
         copyLogs.tap()
     }
@@ -261,21 +270,67 @@ final class RooSyncUITests: XCTestCase {
         name.typeText("Duplicate external folder")
         app.buttons["Choose an existing folder…"].tap()
 
-        let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")
-        let browse = files.buttons["Browse"]
-        if browse.waitForExistence(timeout: 5), !browse.isSelected { browse.tap() }
-        let vaults = files.cells.matching(identifier: "Vaults, Folder").firstMatch
-        if !vaults.exists {
-            let appFolder = files.cells.matching(identifier: "RooSync, Container").firstMatch
-            XCTAssertTrue(appFolder.waitForExistence(timeout: 15))
-            appFolder.tap()
+        let browse = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Browse"))
+            .firstMatch
+        guard browse.waitForExistence(timeout: 30) else {
+            attachDocumentPickerDiagnostics(in: app, state: "Browse-unavailable")
+            XCTFail("The host app's folder picker did not expose Browse from Recents.")
+            return
         }
-        XCTAssertTrue(vaults.waitForExistence(timeout: 15))
+        attachDocumentPickerDiagnostics(in: app, state: "Recents")
+        if !browse.isSelected { browse.tap() }
+
+        let onMyIPhone = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "On My iPhone"))
+            .firstMatch
+        guard onMyIPhone.waitForExistence(timeout: 15) else {
+            attachDocumentPickerDiagnostics(in: app, state: "On-My-iPhone-unavailable")
+            XCTFail("Browse did not expose On My iPhone.")
+            return
+        }
+        attachDocumentPickerDiagnostics(in: app, state: "Browse")
+        onMyIPhone.tap()
+
+        let rooSyncContainer = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync"))
+            .firstMatch
+        guard rooSyncContainer.waitForExistence(timeout: 15) else {
+            attachDocumentPickerDiagnostics(in: app, state: "RooSync-unavailable")
+            XCTFail("On My iPhone did not expose the RooSync container.")
+            return
+        }
+        attachDocumentPickerDiagnostics(in: app, state: "On-My-iPhone")
+        rooSyncContainer.tap()
+
+        let vaults = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Vaults"))
+            .firstMatch
+        guard vaults.waitForExistence(timeout: 15) else {
+            attachDocumentPickerDiagnostics(in: app, state: "Vaults-unavailable")
+            XCTFail("The RooSync container did not expose Vaults.")
+            return
+        }
+        attachDocumentPickerDiagnostics(in: app, state: "RooSync")
         vaults.tap()
-        let candidate = files.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault")).firstMatch
-        XCTAssertTrue(candidate.waitForExistence(timeout: 15))
+
+        let candidate = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault"))
+            .firstMatch
+        guard candidate.waitForExistence(timeout: 15) else {
+            attachDocumentPickerDiagnostics(in: app, state: "Vault-candidate-unavailable")
+            XCTFail("Vaults did not expose the RooSync E2E Vault folder.")
+            return
+        }
+        attachDocumentPickerDiagnostics(in: app, state: "Vaults")
         candidate.tap()
-        files.buttons["Open"].tap()
+        let open = app.buttons["Open"]
+        guard open.waitForExistence(timeout: 15) else {
+            attachDocumentPickerDiagnostics(in: app, state: "Open-unavailable")
+            XCTFail("The selected vault did not expose Open.")
+            return
+        }
+        open.tap()
 
         XCTAssertTrue(app.alerts.staticTexts["A folder with this Syncthing ID already exists."].waitForExistence(timeout: 30))
     }
@@ -396,6 +451,15 @@ final class RooSyncUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    @MainActor
+    private func attachDocumentPickerDiagnostics(in app: XCUIApplication, state: String) {
+        let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
+        hierarchy.name = "Document picker \(state) accessibility hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        attachScreenshot(named: "Document picker \(state)")
     }
 
     @MainActor
