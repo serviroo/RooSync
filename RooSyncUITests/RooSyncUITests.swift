@@ -17,6 +17,97 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testDuoAdaptiveLayoutAndFormsInStartingPose() throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["ROOSYNC_DUO_LAYOUT_TESTS"] == "1",
+              environment["ROOSYNC_DUO_SIMULATOR_VERIFIED"] == "1" else {
+            throw XCTSkip("The Duo layout smoke test requires the exact-profile Duo simulator preflight.")
+        }
+
+        let app = XCUIApplication()
+        app.launch()
+
+        let deviceID = app.staticTexts["device-id"]
+        XCTAssertTrue(deviceID.waitForExistence(timeout: 30))
+        XCTAssertTrue(deviceID.isHittable)
+        let qrCode = app.images["device-qr-code"]
+        XCTAssertTrue(qrCode.waitForExistence(timeout: 15))
+        XCTAssertTrue(qrCode.isHittable)
+        XCTAssertGreaterThanOrEqual(qrCode.frame.width, 80)
+        XCTAssertGreaterThanOrEqual(qrCode.frame.height, 80)
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 15))
+        for element in [deviceID, qrCode] {
+            XCTAssertGreaterThanOrEqual(element.frame.minX, window.frame.minX)
+            XCTAssertLessThanOrEqual(element.frame.maxX, window.frame.maxX)
+            XCTAssertGreaterThanOrEqual(element.frame.minY, window.frame.minY)
+            XCTAssertLessThanOrEqual(element.frame.maxY, window.frame.maxY)
+        }
+
+        let syncButton = app.buttons["Sync now"]
+        let addButton = app.buttons["Add"]
+        XCTAssertTrue(syncButton.waitForExistence(timeout: 15))
+        XCTAssertTrue(syncButton.isHittable)
+        XCTAssertTrue(addButton.waitForExistence(timeout: 15))
+        XCTAssertTrue(addButton.isHittable)
+        syncButton.tap()
+        attachScreenshot(named: "Duo-starting-pose-folders")
+
+        tapAddMenu(in: app)
+        app.buttons["Add device"].tap()
+        let deviceIDField = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Device ID or QR code"))
+            .firstMatch
+        XCTAssertTrue(deviceIDField.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textFields["Name"].exists)
+        XCTAssertTrue(app.textFields["Address (optional)"].exists)
+        XCTAssertTrue(app.buttons["Cancel"].isHittable)
+        attachScreenshot(named: "Duo-add-device-form")
+        app.buttons["Cancel"].tap()
+
+        tapAddMenu(in: app)
+        app.buttons["Add app folder"].tap()
+        let folderName = app.textFields["Name"]
+        XCTAssertTrue(folderName.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.textFields["Syncthing folder ID"].exists)
+        XCTAssertTrue(app.buttons["Create in RooSync Documents"].exists)
+        folderName.tap()
+        folderName.typeText("Duo smoke draft")
+        XCTAssertTrue(app.buttons["Cancel"].isHittable)
+        attachScreenshot(named: "Duo-add-folder-form")
+        app.buttons["Cancel"].tap()
+
+        let folder = app.staticTexts["RooSync E2E Vault"]
+        XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        folder.tap()
+        let folderAction = app.buttons.matching(
+            NSPredicate(format: "label IN %@", ["Pause syncing", "Resume syncing"])
+        ).firstMatch
+        XCTAssertTrue(folderAction.waitForExistence(timeout: 15))
+        let sharingLink = app.staticTexts["Share with devices"]
+        XCTAssertTrue(sharingLink.waitForExistence(timeout: 15))
+        attachScreenshot(named: "Duo-folder-detail")
+
+        sharingLink.tap()
+        XCTAssertTrue(app.navigationBars["Share folder"].waitForExistence(timeout: 15))
+        attachScreenshot(named: "Duo-folder-sharing")
+
+        app.buttons["Settings"].tap()
+        let logsLink = app.staticTexts["Syncthing logs"]
+        XCTAssertTrue(logsLink.waitForExistence(timeout: 15))
+        logsLink.tap()
+        let exportLogs = app.buttons["Export logs"]
+        XCTAssertTrue(exportLogs.waitForExistence(timeout: 15))
+        XCTAssertTrue(exportLogs.isHittable)
+        attachScreenshot(named: "Duo-logs-toolbar")
+        exportLogs.tap()
+        let copyLogs = app.buttons["Copy"]
+        XCTAssertTrue(copyLogs.waitForExistence(timeout: 15))
+        attachScreenshot(named: "Duo-logs-share-sheet")
+        copyLogs.tap()
+    }
+
+    @MainActor
     func testEmbeddedRESTRejectsRequestsWithoutAPIKey() async throws {
         let app = XCUIApplication()
         app.launch()
@@ -65,12 +156,13 @@ final class RooSyncUITests: XCTestCase {
         accept.tap()
         XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
 
-        let pairedDevice = app.staticTexts["Docker Syncthing E2E"]
-        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
         let folderList = app.collectionViews.firstMatch
+        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
+        let pairedDevice = app.staticTexts["Docker Syncthing E2E"]
         for _ in 0..<8 where !pairedDevice.isHittable {
             folderList.swipeUp()
         }
+        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
         XCTAssertTrue(pairedDevice.isHittable)
         pairedDevice.tap()
         XCTAssertFalse(
@@ -275,6 +367,14 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    private func attachScreenshot(named name: String) {
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     private func attachKeyboardFocusFailureDiagnostics(in app: XCUIApplication, field: XCUIElement) {
         let keyboard = app.keyboards.firstMatch
         let state = """
@@ -299,8 +399,14 @@ final class RooSyncUITests: XCTestCase {
 
     @MainActor
     private func openE2EFolder(in app: XCUIApplication) {
+        let folderList = app.collectionViews.firstMatch
+        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let folder = app.staticTexts["RooSync E2E Vault"]
+        for _ in 0..<8 where !folder.isHittable {
+            folderList.swipeDown()
+        }
         XCTAssertTrue(folder.waitForExistence(timeout: 30))
+        XCTAssertTrue(folder.isHittable)
         folder.tap()
     }
 }

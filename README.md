@@ -43,8 +43,17 @@ complete device IDs. Toolbar actions include both titles and symbols. These
 changes use APIs available at RooSync's iOS 18 deployment target.
 
 Apple identifies Xcode 27.1 or later with the iOS 27.1 SDK or later as necessary
-for the full native iPhone Duo presentation. Duo-specific simulator and device
-validation has not been performed, so RooSync's Duo layout is not yet verified.
+for the full native iPhone Duo presentation. A focused hosted iPhone Duo
+simulator smoke test is configured for that exact Xcode, SDK, runtime, and device
+profile. It checks the starting pose's device ID and QR visibility, toolbar
+actions, add-device/add-folder forms, folder navigation, and logs export, and
+stores successful screenshots in the E2E result artifact. After the UI checks
+pass, the job also packages a separate unsigned arm64 Release artifact built
+with Xcode 27.1 and the iOS 27.1 SDK. This hosted check has not yet completed,
+so the Duo layout is not yet verified. An IPA built with Xcode 26.6 and the iOS
+26.5 SDK does not include the full native Duo presentation. The test does not
+automate opening, closing, folding, or rotating the simulator; those transitions
+and physical-device behavior remain unverified.
 
 ## Install from source
 

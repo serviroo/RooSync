@@ -176,6 +176,7 @@ private struct DeviceIdentityView: View {
                     .padding(8)
                     .background(Color.white)
                     .accessibilityLabel("QR code for this device")
+                    .accessibilityIdentifier("device-qr-code")
             } else {
                 Image(systemName: "qrcode")
                     .font(.system(size: 60))

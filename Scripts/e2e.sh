@@ -157,6 +157,7 @@ capture_failure_diagnostics() {
 	print_xcresult_failure_diagnostics "$E2E_DIR/RooSync-E2E.xcresult" ui
 	print_xcresult_failure_diagnostics "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" pending-collision
 	print_xcresult_failure_diagnostics "$E2E_DIR/FocusedSelfAddAndOffer-E2E.xcresult" focused-ui
+	print_xcresult_failure_diagnostics "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" duo-focused-ui
 	{
 		printf 'run_id=%s\n' "$RUN_ID"
 		printf 'simulator_udid=%s\n' "${SIMULATOR_UDID:-unavailable}"
@@ -306,6 +307,12 @@ fail() {
 	printf 'E2E failure: %s\n' "$*" >&2
 	exit 1
 }
+
+if [[ "${ROOSYNC_DUO_LAYOUT_TESTS:-0}" == 1 ]]; then
+	[[ "${ROOSYNC_FOCUSED_UI_TESTS:-0}" != 1 ]] || fail "Choose either generic focused UI tests or Duo layout tests, not both."
+	[[ "${ROOSYNC_DUO_SIMULATOR_VERIFIED:-0}" == 1 && -n "$SIMULATOR_UDID" ]] || \
+		fail "Duo layout tests require a simulator verified by the exact Duo preflight."
+fi
 
 if [[ -f "$HOME/.colima/_lima/colima/ssh.config" ]] && command -v limactl >/dev/null 2>&1; then
 	export LIMA_HOME="$HOME/.colima/_lima"
@@ -637,6 +644,53 @@ if [[ "${ROOSYNC_E2E_ONLY_PENDING_COLLISION:-0}" == 1 ]]; then
 	[[ "$PENDING_OFFER_READY" == true ]] || fail "The first Unicode-equivalent pending offer did not reach the simulator."
 	run_pending_folder_collision_test
 	printf '%s\n' 'PASS: pending-ID collisions fail closed while configured status and policy refresh.'
+	exit 0
+fi
+
+if [[ "${ROOSYNC_DUO_LAYOUT_TESTS:-0}" == 1 ]]; then
+	xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+	APP_INSTALLED=1
+	ROOSYNC_DUO_LAYOUT_TESTS=1 ROOSYNC_DUO_SIMULATOR_VERIFIED=1 \
+		xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+		-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+		-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+		-maximum-concurrent-test-simulator-destinations 1 \
+		CODE_SIGNING_ALLOWED=NO test-without-building \
+		-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
+		-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingOfferForExistingFolderSharesWithoutReplacingIt \
+		-only-testing:RooSyncUITests/RooSyncUITests/testDuoAdaptiveLayoutAndFormsInStartingPose \
+		-resultBundlePath "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" >"$E2E_DIR/focused-ui-test.log" 2>&1 || {
+		grep -nE 'error:|failed|Failure|TEST FAILED|signal kill' "$E2E_DIR/focused-ui-test.log" | tail -80 >&2 || true
+		fail "Focused Duo UI tests failed; see $E2E_DIR/focused-ui-test.log."
+	}
+	python3 - "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" <<'PY' || fail "The Duo layout test did not report a passed result."
+import json
+import subprocess
+import sys
+
+result_bundle = sys.argv[1]
+report = json.loads(subprocess.check_output([
+    "xcrun", "xcresulttool", "get", "test-results", "tests",
+    "--path", result_bundle, "--compact",
+]))
+results = []
+def collect(node):
+    if isinstance(node, dict):
+        if node.get("nodeType") == "Test Case" and node.get("name", "").startswith(
+            "testDuoAdaptiveLayoutAndFormsInStartingPose"
+        ):
+            results.append(node.get("result"))
+        for child in node.values():
+            collect(child)
+    elif isinstance(node, list):
+        for child in node:
+            collect(child)
+
+collect(report.get("testNodes", []))
+if results != ["Passed"]:
+    raise SystemExit(f"Expected the Duo layout test to pass exactly once, found {results}")
+PY
+	printf '%s\n' 'PASS: exact-profile focused Duo UI tests passed.'
 	exit 0
 fi
 
