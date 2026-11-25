@@ -95,6 +95,7 @@ private struct FolderListView: View {
                         NavigationLink(value: FolderSelection(folderID: folder.id)) {
                             FolderRow(folder: folder, status: store.statuses[folder.id], conflicts: store.conflicts(in: folder).count)
                         }
+                        .accessibilityIdentifier("folder-row-\(folder.id)")
                     }
                 }
                 Section("Devices") {
@@ -105,6 +106,7 @@ private struct FolderListView: View {
                     ForEach(store.devices) { device in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(device.name)
+                                .accessibilityIdentifier("paired-device-name-\(device.name)")
                             Text(device.deviceID)
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
@@ -305,6 +307,7 @@ private struct AddDeviceView: View {
                     } label: {
                         Label("Add", systemImage: "plus")
                     }
+                    .accessibilityIdentifier("add-device-confirmation")
                     .disabled(deviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isLocalDeviceID(deviceID))
                 }
             }
@@ -478,6 +481,7 @@ private struct FolderDetailView: View {
                             Button("Choose folder location again") { showingFolderPicker = true }
                         }
                         NavigationLink("Share with devices") { FolderSharingView(folderID: folder.id) }
+                            .accessibilityIdentifier("folder-share-devices-link")
                         NavigationLink("Ignore patterns") { IgnorePatternsView(folder: folder) }
                         NavigationLink {
                             ConflictListView(folder: folder)
@@ -666,6 +670,7 @@ private struct NetworkSettingsView: View {
                 }
                 Section("Diagnostics") {
                     NavigationLink("Syncthing logs") { LogsView() }
+                        .accessibilityIdentifier("settings-syncthing-logs-link")
                     LabeledContent("Current network", value: store.isCellular ? "Cellular" : "Wi-Fi or other")
                     LabeledContent("Power", value: store.isOnBattery ? "Battery" : "External power")
                 }

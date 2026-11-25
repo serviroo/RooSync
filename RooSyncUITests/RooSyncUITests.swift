@@ -82,8 +82,18 @@ final class RooSyncUITests: XCTestCase {
             NSPredicate(format: "label IN %@", ["Pause syncing", "Resume syncing"])
         ).firstMatch
         XCTAssertTrue(folderAction.waitForExistence(timeout: 15))
-        let sharingLink = app.staticTexts["Share with devices"]
+        let sharingLink = app.descendants(matching: .any)
+            .matching(identifier: "folder-share-devices-link")
+            .firstMatch
+        let folderDetailList = app.collectionViews.firstMatch
+        for _ in 0..<12 {
+            if sharingLink.exists,
+               sharingLink.frame.minY >= folderDetailList.frame.minY,
+               sharingLink.frame.maxY <= folderDetailList.frame.maxY { break }
+            folderDetailList.swipeUp()
+        }
         XCTAssertTrue(sharingLink.waitForExistence(timeout: 15))
+        XCTAssertTrue(sharingLink.isHittable)
         attachScreenshot(named: "Duo-folder-detail")
 
         sharingLink.tap()
@@ -91,10 +101,19 @@ final class RooSyncUITests: XCTestCase {
         attachScreenshot(named: "Duo-folder-sharing")
 
         app.buttons["Settings"].tap()
-        let logsLink = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", "Syncthing logs")
-        ).firstMatch
+        let settingsList = app.collectionViews.firstMatch
+        XCTAssertTrue(settingsList.waitForExistence(timeout: 15))
+        let logsLink = app.descendants(matching: .any)
+            .matching(identifier: "settings-syncthing-logs-link")
+            .firstMatch
+        for _ in 0..<12 {
+            if logsLink.exists,
+               logsLink.frame.minY >= settingsList.frame.minY,
+               logsLink.frame.maxY <= settingsList.frame.maxY { break }
+            settingsList.swipeUp()
+        }
         XCTAssertTrue(logsLink.waitForExistence(timeout: 15))
+        XCTAssertTrue(logsLink.isHittable)
         logsLink.tap()
         let exportLogs = app.buttons["Export logs"]
         XCTAssertTrue(exportLogs.waitForExistence(timeout: 15))
@@ -143,9 +162,7 @@ final class RooSyncUITests: XCTestCase {
         idField.typeText(ownDeviceID.label)
 
         XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
-        let addButton = app.navigationBars["Add device"].buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "Add")
-        ).firstMatch
+        let addButton = app.buttons["add-device-confirmation"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 15))
         XCTAssertFalse(addButton.isEnabled)
     }
@@ -161,10 +178,11 @@ final class RooSyncUITests: XCTestCase {
 
         let folderList = app.collectionViews.firstMatch
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
-        let pairedDevice = folderList.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@", "Docker Syncthing E2E")
-        ).firstMatch
-        for _ in 0..<8 where !pairedDevice.isHittable {
+        let foldersTab = app.buttons["Folders"]
+        XCTAssertTrue(foldersTab.waitForExistence(timeout: 15))
+        let pairedDevice = app.staticTexts["paired-device-name-Docker Syncthing E2E"]
+        for _ in 0..<12 {
+            if pairedDevice.exists && pairedDevice.frame.maxY < foldersTab.frame.minY { break }
             folderList.swipeUp()
         }
         XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
@@ -243,20 +261,21 @@ final class RooSyncUITests: XCTestCase {
         name.typeText("Duplicate external folder")
         app.buttons["Choose an existing folder…"].tap()
 
-        let browse = app.buttons["Browse"]
+        let files = XCUIApplication(bundleIdentifier: "com.apple.DocumentsApp")
+        let browse = files.buttons["Browse"]
         if browse.waitForExistence(timeout: 5), !browse.isSelected { browse.tap() }
-        let vaults = app.cells.matching(identifier: "Vaults, Folder").firstMatch
+        let vaults = files.cells.matching(identifier: "Vaults, Folder").firstMatch
         if !vaults.exists {
-            let appFolder = app.cells.matching(identifier: "RooSync, Container").firstMatch
+            let appFolder = files.cells.matching(identifier: "RooSync, Container").firstMatch
             XCTAssertTrue(appFolder.waitForExistence(timeout: 15))
             appFolder.tap()
         }
         XCTAssertTrue(vaults.waitForExistence(timeout: 15))
         vaults.tap()
-        let candidate = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault")).firstMatch
+        let candidate = files.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault")).firstMatch
         XCTAssertTrue(candidate.waitForExistence(timeout: 15))
         candidate.tap()
-        app.buttons["Open"].tap()
+        files.buttons["Open"].tap()
 
         XCTAssertTrue(app.alerts.staticTexts["A folder with this Syncthing ID already exists."].waitForExistence(timeout: 30))
     }
@@ -406,8 +425,13 @@ final class RooSyncUITests: XCTestCase {
     private func openE2EFolder(in app: XCUIApplication) {
         let folderList = app.collectionViews.firstMatch
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
-        let folder = app.staticTexts["RooSync E2E Vault"]
-        for _ in 0..<8 where !folder.isHittable {
+        let folder = app.descendants(matching: .any)
+            .matching(identifier: "folder-row-roosync-e2e-vault")
+            .firstMatch
+        for _ in 0..<12 {
+            if folder.exists,
+               folder.frame.minY >= folderList.frame.minY,
+               folder.frame.maxY <= folderList.frame.maxY { break }
             folderList.swipeUp()
         }
         XCTAssertTrue(folder.waitForExistence(timeout: 30))
