@@ -289,16 +289,30 @@ final class RooSyncUITests: XCTestCase {
         name.typeText("Duplicate external folder")
         app.buttons["Choose an existing folder…"].tap()
 
-        let pickerView = app.otherElements
+        let documentManager = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
+        guard documentManager.wait(for: .runningForeground, timeout: 10) else {
+            let serviceState = XCTAttachment(string: "Document manager service state: \(documentManager.state.rawValue)")
+            serviceState.name = "Document manager service state"
+            serviceState.lifetime = .keepAlways
+            add(serviceState)
+            attachDocumentPickerDiagnostics(in: app, picker: nil, state: "Picker-unavailable")
+            XCTFail("The active document manager picker did not appear.")
+            return
+        }
+        let pickerView = documentManager.otherElements
             .matching(identifier: "Browse View (Picker)")
             .firstMatch
-        guard pickerView.waitForExistence(timeout: 30) else {
+        guard pickerView.waitForExistence(timeout: 5) else {
+            let serviceHierarchy = XCTAttachment(string: String(documentManager.debugDescription.prefix(20000)))
+            serviceHierarchy.name = "Document manager picker accessibility hierarchy"
+            serviceHierarchy.lifetime = .keepAlways
+            add(serviceHierarchy)
             attachDocumentPickerDiagnostics(in: app, picker: nil, state: "Picker-unavailable")
             XCTFail("The active document manager picker did not appear.")
             return
         }
         let browse = pickerView.buttons["Browse"]
-        guard browse.waitForExistence(timeout: 30) else {
+        guard browse.waitForExistence(timeout: 5) else {
             attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Browse-unavailable")
             XCTFail("The active document manager picker did not expose Browse from Recents.")
             return
