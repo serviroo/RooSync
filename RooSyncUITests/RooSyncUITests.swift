@@ -38,7 +38,7 @@ final class RooSyncUITests: XCTestCase {
 
         let ownDeviceID = app.staticTexts["device-id"]
         XCTAssertTrue(ownDeviceID.waitForExistence(timeout: 30))
-        app.buttons["Add"].tap()
+        tapAddMenu(in: app)
         app.buttons["Add device"].tap()
 
         let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
@@ -116,7 +116,7 @@ final class RooSyncUITests: XCTestCase {
     func testDuplicateExternalFolderIDIsRejected() {
         let app = XCUIApplication()
         app.launch()
-        app.buttons["Add"].tap()
+        tapAddMenu(in: app)
         app.buttons["Add app folder"].tap()
 
         let folderID = app.textFields["Syncthing folder ID"]
@@ -156,7 +156,7 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(deviceID.waitForExistence(timeout: 30))
         print("ROOSYNC_E2E_DEVICE_ID=\(deviceID.label)")
 
-        app.buttons["Add"].tap()
+        tapAddMenu(in: app)
         app.buttons["Add app folder"].tap()
         let name = app.textFields["Name"]
         XCTAssertTrue(name.waitForExistence(timeout: 15))
@@ -177,7 +177,7 @@ final class RooSyncUITests: XCTestCase {
 
         let app = XCUIApplication()
         app.launch()
-        app.buttons["Add"].tap()
+        tapAddMenu(in: app)
         app.buttons["Add device"].tap()
 
         let idField = app.descendants(matching: .any)
@@ -248,6 +248,13 @@ final class RooSyncUITests: XCTestCase {
             keepCopy.tap()
         }
         XCTAssertTrue(app.staticTexts["No conflicts"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    private func tapAddMenu(in app: XCUIApplication) {
+        let addMenu = app.buttons["Add"]
+        XCTAssertTrue(addMenu.waitForExistence(timeout: 30))
+        addMenu.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     @MainActor
