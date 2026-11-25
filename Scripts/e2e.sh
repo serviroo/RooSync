@@ -337,6 +337,32 @@ set_folder_paused() {
 	[[ "$actual" == "$paused" ]] || fail "Syncthing folder pause state was $actual, expected $paused."
 }
 
+set_device_paused() {
+	local base=$1 key=$2 device_id=$3 paused=$4 actual
+	api_request "$base" "$key" PATCH "/rest/config/devices/$device_id" "{\"paused\":$paused}" >/dev/null
+	actual="$(api_request "$base" "$key" GET "/rest/config/devices/$device_id" | python3 -c 'import json,sys; print(str(bool(json.load(sys.stdin).get("paused"))).lower())')"
+	[[ "$actual" == "$paused" ]] || fail "Syncthing device pause state was $actual, expected $paused."
+}
+
+wait_for_device_connection_state() {
+	local base=$1 key=$2 device_id=$3 paused=$4 expected_connected connections ready
+	expected_connected=false
+	[[ "$paused" == true ]] || expected_connected=true
+	for _ in $(seq 1 90); do
+		connections="$(api_request "$base" "$key" GET /rest/system/connections)"
+		ready="$(python3 -c 'import json,sys; data=json.load(sys.stdin); status=data.get("connections", {}).get(sys.argv[1], {}); paused=sys.argv[2]=="true"; connected=sys.argv[3]=="true"; print(str(bool(status.get("paused"))==paused and bool(status.get("connected"))==connected).lower())' "$device_id" "$paused" "$expected_connected" <<<"$connections")"
+		[[ "$ready" == true ]] && return 0
+		sleep 1
+	done
+	fail "Syncthing device $device_id did not reach paused=$paused, connected=$expected_connected."
+}
+
+local_file_version() {
+	local base=$1 key=$2 file_query=$3
+	api_request "$base" "$key" GET "/rest/db/file?folder=$APP_FOLDER_ID&file=$file_query" |
+		python3 -c 'import json,sys; data=json.load(sys.stdin); print(json.dumps((data.get("local") or {}).get("version"), sort_keys=True))'
+}
+
 wait_for_file() {
 	local path=$1 description=$2
 	for _ in $(seq 1 90); do
@@ -419,17 +445,54 @@ fi
 wait_for_file "$APP_FOLDER/Welcome.md" "Docker-to-simulator note"
 wait_for_file "$DESKTOP_FOLDER/From iPhone.md" "simulator-to-Docker note"
 wait_for_file "$DESKTOP_FOLDER/Extensionless conflict" "extensionless conflict fixture on Docker"
+wait_for_file "$APP_FOLDER/Conflicted note.md" "base conflict fixture on simulator"
+wait_for_file "$DESKTOP_FOLDER/Conflicted note.md" "base conflict fixture on Docker"
 cmp "$ROOT/docs/fixtures/ObsidianVault/Welcome.md" "$APP_FOLDER/Welcome.md"
 cmp "$ROOT/docs/fixtures/ObsidianVault/From iPhone.md" "$DESKTOP_FOLDER/From iPhone.md"
+cmp "$ROOT/docs/fixtures/ObsidianVault/Conflicted note.md" "$APP_FOLDER/Conflicted note.md"
+cmp "$ROOT/docs/fixtures/ObsidianVault/Conflicted note.md" "$DESKTOP_FOLDER/Conflicted note.md"
 
-set_folder_paused "$APP_REST" "$APP_API_KEY" true
-set_folder_paused "$PEER_REST" "$PEER_API_KEY" true
+CONFLICT_FILE_QUERY="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' 'Conflicted note.md')"
+APP_CONFLICT_BASE_VERSION="$(local_file_version "$APP_REST" "$APP_API_KEY" "$CONFLICT_FILE_QUERY")"
+PEER_CONFLICT_BASE_VERSION="$(local_file_version "$PEER_REST" "$PEER_API_KEY" "$CONFLICT_FILE_QUERY")"
+[[ "$APP_CONFLICT_BASE_VERSION" != null && "$PEER_CONFLICT_BASE_VERSION" != null ]] || \
+	fail "The base conflict file was missing from one peer's local Syncthing index."
+
+set_device_paused "$APP_REST" "$APP_API_KEY" "$PEER_ID" true
+set_device_paused "$PEER_REST" "$PEER_API_KEY" "$APP_ID" true
+wait_for_device_connection_state "$APP_REST" "$APP_API_KEY" "$PEER_ID" true
+wait_for_device_connection_state "$PEER_REST" "$PEER_API_KEY" "$APP_ID" true
+
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
 printf 'Edited on the iPhone peer\n' > "$APP_FOLDER/Extensionless conflict"
 printf 'Edited on the Docker peer\n' > "$DESKTOP_FOLDER/Extensionless conflict"
-set_folder_paused "$APP_REST" "$APP_API_KEY" false
-set_folder_paused "$PEER_REST" "$PEER_API_KEY" false
+cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
+cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
+api_request "$APP_REST" "$APP_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
+api_request "$PEER_REST" "$PEER_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
+
+APP_CONFLICT_LOCAL_VERSION="$APP_CONFLICT_BASE_VERSION"
+PEER_CONFLICT_LOCAL_VERSION="$PEER_CONFLICT_BASE_VERSION"
+for _ in $(seq 1 90); do
+	APP_CONFLICT_LOCAL_VERSION="$(local_file_version "$APP_REST" "$APP_API_KEY" "$CONFLICT_FILE_QUERY")"
+	PEER_CONFLICT_LOCAL_VERSION="$(local_file_version "$PEER_REST" "$PEER_API_KEY" "$CONFLICT_FILE_QUERY")"
+	if [[ "$APP_CONFLICT_LOCAL_VERSION" != "$APP_CONFLICT_BASE_VERSION" && \
+		"$PEER_CONFLICT_LOCAL_VERSION" != "$PEER_CONFLICT_BASE_VERSION" ]]; then
+		break
+	fi
+	sleep 1
+done
+[[ "$APP_CONFLICT_LOCAL_VERSION" != "$APP_CONFLICT_BASE_VERSION" && \
+	"$PEER_CONFLICT_LOCAL_VERSION" != "$PEER_CONFLICT_BASE_VERSION" ]] || \
+	fail "Both peers did not index their conflict edits while disconnected."
+cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-iPhone.md" "$APP_FOLDER/Conflicted note.md"
+cmp "$ROOT/docs/fixtures/ObsidianVault/Conflict-Docker.md" "$DESKTOP_FOLDER/Conflicted note.md"
+
+set_device_paused "$APP_REST" "$APP_API_KEY" "$PEER_ID" false
+set_device_paused "$PEER_REST" "$PEER_API_KEY" "$APP_ID" false
+wait_for_device_connection_state "$APP_REST" "$APP_API_KEY" "$PEER_ID" false
+wait_for_device_connection_state "$PEER_REST" "$PEER_API_KEY" "$APP_ID" false
 
 APP_CONFLICT=""
 for _ in $(seq 1 90); do
