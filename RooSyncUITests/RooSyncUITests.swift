@@ -274,6 +274,40 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testPassiveRefreshFailurePreservesFolderDraftAndRecovers() {
+        let app = XCUIApplication()
+        app.launchArguments.append("--roosync-e2e-core-controls")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+
+        tapAddMenu(in: app)
+        app.buttons["Add app folder"].tap()
+        let name = app.textFields["Name"]
+        let folderID = app.textFields["Syncthing folder ID"]
+        XCTAssertTrue(name.waitForExistence(timeout: 15))
+        name.tap()
+        name.typeText("Passive failure draft")
+        folderID.tap()
+        folderID.typeText("passive-refresh-draft")
+
+        let coreControl = app.buttons["e2e-core-control"]
+        XCTAssertTrue(coreControl.waitForExistence(timeout: 15))
+        coreControl.tap()
+        let warning = app.staticTexts["passive-refresh-warning-form"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 30))
+        XCTAssertTrue(warning.isHittable)
+        XCTAssertFalse(app.alerts["RooSync"].exists)
+        XCTAssertEqual(name.value as? String, "Passive failure draft")
+        XCTAssertEqual(folderID.value as? String, "passive-refresh-draft")
+
+        coreControl.tap()
+        XCTAssertTrue(warning.waitForNonExistence(timeout: 30))
+        XCTAssertEqual(name.value as? String, "Passive failure draft")
+        XCTAssertEqual(folderID.value as? String, "passive-refresh-draft")
+        app.buttons["Cancel"].tap()
+    }
+
+    @MainActor
     func testDuplicateExternalFolderIDIsRejected() {
         let app = XCUIApplication()
         app.launch()

@@ -426,6 +426,20 @@ cp -R "$ROOT/docs/fixtures/ObsidianVault/.obsidian" "$DESKTOP_FOLDER/"
 cp "$ROOT/docs/fixtures/ObsidianVault/Welcome.md" "$DESKTOP_FOLDER/"
 cp "$ROOT/docs/fixtures/ObsidianVault/Conflicted note.md" "$DESKTOP_FOLDER/"
 
+if ! "${DOCKER[@]}" image inspect "$PEER_IMAGE" >/dev/null 2>&1; then
+	peer_pull_succeeded=false
+	for attempt in 1 2 3; do
+		if "${DOCKER[@]}" pull "$PEER_IMAGE"; then
+			peer_pull_succeeded=true
+			break
+		fi
+		if (( attempt < 3 )); then
+			sleep $((attempt * 5))
+		fi
+	done
+	[[ "$peer_pull_succeeded" == true ]] || fail "Could not pull Docker Syncthing image after three attempts."
+fi
+
 "${DOCKER[@]}" volume create "$VOLUME_NAME" >/dev/null
 PEER_UID="$(id -u)"
 PEER_GID="$(id -g)"
@@ -858,6 +872,7 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingOfferForExistingFolderSharesWithoutReplacingIt \
 	-only-testing:RooSyncUITests/RooSyncUITests/testCanonicalEquivalentFolderOfferDoesNotShareExistingFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingUnsafeFolderLabelsUsesSafePaths \
+	-only-testing:RooSyncUITests/RooSyncUITests/testPassiveRefreshFailurePreservesFolderDraftAndRecovers \
 	-only-testing:RooSyncUITests/RooSyncUITests/testDuplicateExternalFolderIDIsRejected \
 	-only-testing:RooSyncUITests/RooSyncUITests/testPauseE2ESyncFolder \
 	-only-testing:RooSyncUITests/RooSyncUITests/testResumeE2ESyncFolder \

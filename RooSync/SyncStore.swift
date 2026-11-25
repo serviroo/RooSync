@@ -34,6 +34,8 @@ final class SyncStore: ObservableObject {
     @Published private(set) var pendingFolderWarning: String?
     @Published private(set) var foldersNeedingReauthorization = Set<String>()
     @Published private(set) var errorMessage: String?
+    @Published private(set) var passiveRefreshWarning: String?
+    @Published private(set) var isE2ECoreStopped = false
     @Published private(set) var isCellular = false
     @Published private(set) var isOnBattery = false
     @Published var preferences = NetworkPreferences()
@@ -42,6 +44,10 @@ final class SyncStore: ObservableObject {
     private let api: SyncthingAPI
     private let apiKey: String
     private let coreStartupTask: Task<Void, Error>
+    private let coreConfigDirectory: URL
+    private let coreDataDirectory: URL
+    private let coreDefaultFolder: URL
+    let e2eCoreControlsEnabled: Bool
     private let pathMonitor = NWPathMonitor()
     private let pathQueue = DispatchQueue(label: "com.rooindustries.roosync.network")
     private var refreshTask: Task<Void, Never>?
@@ -60,6 +66,10 @@ final class SyncStore: ObservableObject {
         let defaultFolder = documents.appendingPathComponent("RooSync", isDirectory: true)
         let configDirectory = support.appendingPathComponent("config", isDirectory: true)
         let dataDirectory = support.appendingPathComponent("data", isDirectory: true)
+        coreDefaultFolder = defaultFolder
+        coreConfigDirectory = configDirectory
+        coreDataDirectory = dataDirectory
+        e2eCoreControlsEnabled = ProcessInfo.processInfo.arguments.contains("--roosync-e2e-core-controls")
         let startupAPIKey = apiKey
         coreStartupTask = Task.detached(priority: .userInitiated) {
             try GoCoreBridge.start(
@@ -103,15 +113,20 @@ final class SyncStore: ObservableObject {
         guard refreshTask == nil else { return }
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.refresh()
+                await self?.refresh(isPassive: true)
                 try? await Task.sleep(for: .seconds(5))
             }
         }
     }
 
-    func refresh() async {
+    func refresh(isPassive: Bool = false) async {
         do {
             try await coreStartupTask.value
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+        do {
             deviceID = try await api.status()
             folders = try await loadConfiguredFolders()
             await restoreBookmarksIfNeeded()
@@ -136,10 +151,51 @@ final class SyncStore: ObservableObject {
             }
             await loadNetworkPreferences()
             try await applyLANRestriction(preferences.lanOnly)
-            errorMessage = foldersNeedingReauthorization.isEmpty
+            let reauthorizationWarning = foldersNeedingReauthorization.isEmpty
                 ? nil
                 : "RooSync needs folder access again. Open each affected folder and choose its location."
+            if isPassive {
+                passiveRefreshWarning = reauthorizationWarning
+            } else {
+                passiveRefreshWarning = nil
+                errorMessage = reauthorizationWarning
+            }
             await applyPowerPolicy()
+        } catch {
+            if isPassive {
+                passiveRefreshWarning = error.localizedDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func stopCoreForE2ETest() async {
+        guard e2eCoreControlsEnabled, !isE2ECoreStopped else { return }
+        do {
+            try await Task.detached { try GoCoreBridge.stop() }.value
+            isE2ECoreStopped = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func restartCoreForE2ETest() async {
+        guard e2eCoreControlsEnabled, isE2ECoreStopped else { return }
+        let configDirectory = coreConfigDirectory
+        let dataDirectory = coreDataDirectory
+        let defaultFolder = coreDefaultFolder
+        let apiKey = self.apiKey
+        do {
+            try await Task.detached {
+                try GoCoreBridge.start(
+                    configDirectory: configDirectory,
+                    dataDirectory: dataDirectory,
+                    defaultFolder: defaultFolder,
+                    apiKey: apiKey
+                )
+            }.value
+            isE2ECoreStopped = false
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -784,6 +840,14 @@ private enum GoCoreBridge {
             &error
         )
         guard started else {
+            throw error ?? SyncStoreError.coreStartFailed
+        }
+    }
+
+    static func stop() throws {
+        var error: NSError?
+        let stopped = RoosyncmobileStopCore(&error)
+        guard stopped else {
             throw error ?? SyncStoreError.coreStartFailed
         }
     }

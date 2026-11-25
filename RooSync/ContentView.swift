@@ -16,6 +16,18 @@ struct ContentView: View {
                 .tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
         }
         .tint(.indigo)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let warning = store.passiveRefreshWarning {
+                Text(warning)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(.thinMaterial)
+                    .accessibilityIdentifier("passive-refresh-warning")
+            }
+        }
         .task { store.start() }
         .onAppear { store.updateSceneActivity(scenePhase == .active) }
         .onChange(of: scenePhase) { _, phase in
@@ -333,6 +345,14 @@ private struct AddFolderView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let warning = store.passiveRefreshWarning {
+                    Section {
+                        Text(warning)
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                            .accessibilityIdentifier("passive-refresh-warning-form")
+                    }
+                }
                 Section("Folder details") {
                     TextField("Name", text: $name)
                         .onChange(of: name) { oldValue, newValue in
@@ -361,6 +381,20 @@ private struct AddFolderView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button { dismiss() } label: {
                         Label("Cancel", systemImage: "xmark")
+                    }
+                }
+                if store.e2eCoreControlsEnabled {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(store.isE2ECoreStopped ? "Restart embedded core" : "Stop embedded core") {
+                            Task {
+                                if store.isE2ECoreStopped {
+                                    await store.restartCoreForE2ETest()
+                                } else {
+                                    await store.stopCoreForE2ETest()
+                                }
+                            }
+                        }
+                        .accessibilityIdentifier("e2e-core-control")
                     }
                 }
             }
