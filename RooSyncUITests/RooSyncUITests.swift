@@ -56,7 +56,7 @@ final class RooSyncUITests: XCTestCase {
         tapAddMenu(in: app)
         app.buttons["Add device"].tap()
         let deviceIDField = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Device ID or QR code"))
+            .matching(identifier: "device-id-entry")
             .firstMatch
         XCTAssertTrue(deviceIDField.waitForExistence(timeout: 15))
         XCTAssertTrue(app.textFields["Name"].exists)
@@ -77,9 +77,7 @@ final class RooSyncUITests: XCTestCase {
         attachScreenshot(named: "Duo-add-folder-form")
         app.buttons["Cancel"].tap()
 
-        let folder = app.staticTexts["RooSync E2E Vault"]
-        XCTAssertTrue(folder.waitForExistence(timeout: 30))
-        folder.tap()
+        openE2EFolder(in: app)
         let folderAction = app.buttons.matching(
             NSPredicate(format: "label IN %@", ["Pause syncing", "Resume syncing"])
         ).firstMatch
@@ -143,7 +141,8 @@ final class RooSyncUITests: XCTestCase {
         idField.typeText(ownDeviceID.label)
 
         XCTAssertTrue(app.staticTexts["This is this device’s own ID."].exists)
-        let addButton = app.buttons.matching(identifier: "Add").firstMatch
+        let addButton = app.navigationBars["Add device"].buttons["Add"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 15))
         XCTAssertFalse(addButton.isEnabled)
     }
 
@@ -403,7 +402,7 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let folder = app.staticTexts["RooSync E2E Vault"]
         for _ in 0..<8 where !folder.isHittable {
-            folderList.swipeDown()
+            folderList.swipeUp()
         }
         XCTAssertTrue(folder.waitForExistence(timeout: 30))
         XCTAssertTrue(folder.isHittable)
