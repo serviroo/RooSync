@@ -289,7 +289,7 @@ final class RooSyncUITests: XCTestCase {
         name.typeText("Duplicate external folder")
         app.buttons["Choose an existing folder…"].tap()
 
-        let picker = XCUIApplication(bundleIdentifier: "com.apple.DocumentManagerUICore.Service")
+        let picker = app
         let browse = picker.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", "Browse"))
             .firstMatch
