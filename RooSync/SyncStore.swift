@@ -167,8 +167,8 @@ final class SyncStore: ObservableObject {
                     statusWarning = statusWarning ?? error.localizedDescription
                 }
             }
-            let refreshedPreferences = try await fetchNetworkPreferences()
-            try await applyLANRestriction(refreshedPreferences.lanOnly)
+            let optionValues = try await api.options()
+            try await applyLANRestriction(mergeNetworkPreferences(from: optionValues).lanOnly)
             let reauthorizationWarning = foldersNeedingReauthorization.isEmpty
                 ? nil
                 : "RooSync needs folder access again. Open each affected folder and choose its location."
@@ -182,6 +182,7 @@ final class SyncStore: ObservableObject {
             if pendingFolders != refreshedPendingFolders { pendingFolders = refreshedPendingFolders }
             if pendingFolderWarning != refreshedPendingFolderWarning { pendingFolderWarning = refreshedPendingFolderWarning }
             if statuses != refreshedStatuses { statuses = refreshedStatuses }
+            let refreshedPreferences = mergeNetworkPreferences(from: optionValues)
             if preferences != refreshedPreferences { preferences = refreshedPreferences }
             if isPassive {
                 if passiveRefreshWarning != refreshWarning { passiveRefreshWarning = refreshWarning }
@@ -242,7 +243,8 @@ final class SyncStore: ObservableObject {
             }
             if folders != syncedFolders { folders = syncedFolders }
             foldersLoaded = true
-            let loadedPreferences = try await fetchNetworkPreferences()
+            let optionValues = try await api.options()
+            let loadedPreferences = mergeNetworkPreferences(from: optionValues)
             if preferences != loadedPreferences { preferences = loadedPreferences }
             try await applyLANRestriction(preferences.lanOnly)
             await applyPowerPolicy()
@@ -592,8 +594,7 @@ final class SyncStore: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = sceneIsActive && preferences.keepAliveWhileCharging && charging
     }
 
-    private func fetchNetworkPreferences() async throws -> NetworkPreferences {
-        let values = try await api.options()
+    private func mergeNetworkPreferences(from values: [String: Any]) -> NetworkPreferences {
         let defaults = UserDefaults.standard
         var loaded = preferences
         if defaults.bool(forKey: "networkPreferencesSaved") {
