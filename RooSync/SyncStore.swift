@@ -133,13 +133,27 @@ final class SyncStore: ObservableObject {
             return
         }
         do {
-            deviceID = try await api.status()
-            folders = try await loadConfiguredFolders()
-            await restoreBookmarksIfNeeded()
-            try await reconcileAppDocumentsFolderPaths()
-            folders = try await loadConfiguredFolders()
+            let refreshedDeviceID = try await api.status()
+            if deviceID != refreshedDeviceID {
+                deviceID = refreshedDeviceID
+            }
+            let initialFolders = try await loadConfiguredFolders()
+            await restoreBookmarksIfNeeded(for: initialFolders)
+            try await reconcileAppDocumentsFolderPaths(for: initialFolders)
+            let refreshedFolders = try await loadConfiguredFolders()
+            if folders != refreshedFolders {
+                folders = refreshedFolders
+            }
             foldersLoaded = true
-            devices = try await api.devices().filter { !isLocalDeviceID($0.deviceID) }
+            let refreshedDevices = try await api.devices()
+                .filter { !isLocalDeviceID($0.deviceID) }
+                .sorted {
+                    let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+                    return order == .orderedSame ? $0.deviceID < $1.deviceID : order == .orderedAscending
+                }
+            if devices != refreshedDevices {
+                devices = refreshedDevices
+            }
             let refreshedPendingDevices = try await api.pendingDevices()
             let refreshedPendingFolders: [PendingFolder]
             let refreshedPendingFolderWarning: String?
@@ -150,18 +164,26 @@ final class SyncStore: ObservableObject {
                 refreshedPendingFolders = []
                 refreshedPendingFolderWarning = error.localizedDescription
             }
-            pendingDevices = refreshedPendingDevices
-            pendingFolders = refreshedPendingFolders
-            pendingFolderWarning = refreshedPendingFolderWarning
+            if pendingDevices != refreshedPendingDevices {
+                pendingDevices = refreshedPendingDevices
+            }
+            if pendingFolders != refreshedPendingFolders {
+                pendingFolders = refreshedPendingFolders
+            }
+            if pendingFolderWarning != refreshedPendingFolderWarning {
+                pendingFolderWarning = refreshedPendingFolderWarning
+            }
             var statusWarning: String?
-            for folder in folders {
+            var refreshedStatuses: [String: FolderStatus] = [:]
+            for folder in refreshedFolders {
                 do {
-                    let status = try await api.folderStatus(folder.id)
-                    statuses[folder.id] = status
+                    refreshedStatuses[folder.id] = try await api.folderStatus(folder.id)
                 } catch {
-                    statuses.removeValue(forKey: folder.id)
                     statusWarning = statusWarning ?? error.localizedDescription
                 }
+            }
+            if statuses != refreshedStatuses {
+                statuses = refreshedStatuses
             }
             try await loadNetworkPreferences()
             try await applyLANRestriction(preferences.lanOnly)
@@ -170,10 +192,16 @@ final class SyncStore: ObservableObject {
                 : "RooSync needs folder access again. Open each affected folder and choose its location."
             let refreshWarning = reauthorizationWarning ?? statusWarning
             if isPassive {
-                passiveRefreshWarning = refreshWarning
+                if passiveRefreshWarning != refreshWarning {
+                    passiveRefreshWarning = refreshWarning
+                }
             } else {
-                passiveRefreshWarning = nil
-                errorMessage = refreshWarning
+                if passiveRefreshWarning != nil {
+                    passiveRefreshWarning = nil
+                }
+                if errorMessage != refreshWarning {
+                    errorMessage = refreshWarning
+                }
             }
             await applyPowerPolicy(isPassive: isPassive)
         } catch {
@@ -577,18 +605,22 @@ final class SyncStore: ObservableObject {
     private func loadNetworkPreferences() async throws {
         let values = try await api.options()
         let defaults = UserDefaults.standard
+        var loaded = preferences
         if defaults.bool(forKey: "networkPreferencesSaved") {
-            preferences.discoveryEnabled = defaults.object(forKey: "discoveryEnabled") as? Bool ?? true
-            preferences.relaysEnabled = defaults.object(forKey: "relaysEnabled") as? Bool ?? true
-            preferences.lanOnly = defaults.object(forKey: "lanOnly") as? Bool ?? false
-            preferences.maxSendKbps = defaults.object(forKey: "maxSendKbps") as? Int ?? 0
-            preferences.maxReceiveKbps = defaults.object(forKey: "maxReceiveKbps") as? Int ?? 0
+            loaded.discoveryEnabled = defaults.object(forKey: "discoveryEnabled") as? Bool ?? true
+            loaded.relaysEnabled = defaults.object(forKey: "relaysEnabled") as? Bool ?? true
+            loaded.lanOnly = defaults.object(forKey: "lanOnly") as? Bool ?? false
+            loaded.maxSendKbps = defaults.object(forKey: "maxSendKbps") as? Int ?? 0
+            loaded.maxReceiveKbps = defaults.object(forKey: "maxReceiveKbps") as? Int ?? 0
         } else {
-            preferences.discoveryEnabled = values["localAnnounceEnabled"] as? Bool ?? true
-            preferences.relaysEnabled = values["relaysEnabled"] as? Bool ?? true
-            preferences.lanOnly = false
-            preferences.maxSendKbps = values["maxSendKbps"] as? Int ?? 0
-            preferences.maxReceiveKbps = values["maxRecvKbps"] as? Int ?? 0
+            loaded.discoveryEnabled = values["localAnnounceEnabled"] as? Bool ?? true
+            loaded.relaysEnabled = values["relaysEnabled"] as? Bool ?? true
+            loaded.lanOnly = false
+            loaded.maxSendKbps = values["maxSendKbps"] as? Int ?? 0
+            loaded.maxReceiveKbps = values["maxRecvKbps"] as? Int ?? 0
+        }
+        if preferences != loaded {
+            preferences = loaded
         }
     }
 
@@ -628,12 +660,13 @@ final class SyncStore: ObservableObject {
         UserDefaults.standard.set(policyPausedFolders.sorted(), forKey: "policyPausedFolders")
     }
 
-    private func restoreBookmarksIfNeeded() async {
+    private func restoreBookmarksIfNeeded(for configuredFolders: [SyncthingFolder]? = nil) async {
         guard !bookmarksRestored else { return }
         bookmarksRestored = true
+        let currentFolders = configuredFolders ?? folders
         let storedBookmarks = UserDefaults.standard.dictionary(forKey: "folderBookmarks") as? [String: Data] ?? [:]
         var bookmarks = storedBookmarks
-        let folderIDs = Set(folders.map(\.id))
+        let folderIDs = Set(currentFolders.map(\.id))
         for (folderID, bookmark) in storedBookmarks where folderIDs.contains(folderID) {
             var stale = false
             guard let url = try? URL(resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale),
@@ -645,7 +678,7 @@ final class SyncStore: ObservableObject {
             if stale, let refreshed = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
                 bookmarks[folderID] = refreshed
             }
-            if let folder = folders.first(where: { $0.id == folderID }), folder.path != url.path {
+            if let folder = currentFolders.first(where: { $0.id == folderID }), folder.path != url.path {
                 do {
                     try await api.updateFolderPath(folderID, path: url.path)
                 } catch {
@@ -657,13 +690,14 @@ final class SyncStore: ObservableObject {
         UserDefaults.standard.set(bookmarks, forKey: "folderBookmarks")
     }
 
-    private func reconcileAppDocumentsFolderPaths() async throws {
+    private func reconcileAppDocumentsFolderPaths(for configuredFolders: [SyncthingFolder]? = nil) async throws {
+        let currentFolders = configuredFolders ?? folders
         let fileManager = FileManager.default
         let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .standardizedFileURL
         let bookmarks = UserDefaults.standard.dictionary(forKey: "folderBookmarks") as? [String: Data] ?? [:]
         let bookmarkedFolderIDs = Set(bookmarks.keys)
-        for folder in folders where !bookmarkedFolderIDs.contains(folder.id) {
+        for folder in currentFolders where !bookmarkedFolderIDs.contains(folder.id) {
             guard let path = rebasedAppDocumentsPath(folder.path, to: documentsDirectory), path != folder.path else {
                 continue
             }

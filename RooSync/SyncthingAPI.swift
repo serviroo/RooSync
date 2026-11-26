@@ -1,6 +1,6 @@
 import Foundation
 
-struct SyncthingDevice: Decodable, Identifiable, Sendable {
+struct SyncthingDevice: Decodable, Identifiable, Equatable, Sendable {
     let deviceID: String
     let name: String
     let addresses: [String]?
@@ -8,7 +8,7 @@ struct SyncthingDevice: Decodable, Identifiable, Sendable {
     var id: String { deviceID }
 }
 
-struct SyncthingFolder: Decodable, Identifiable, Sendable {
+struct SyncthingFolder: Decodable, Identifiable, Equatable, Sendable {
     let id: String
     let label: String
     let path: String
@@ -29,12 +29,12 @@ struct SyncthingFolder: Decodable, Identifiable, Sendable {
     }
 }
 
-struct FolderShare: Decodable, Identifiable, Sendable {
+struct FolderShare: Decodable, Identifiable, Equatable, Sendable {
     let deviceID: String
     var id: String { deviceID }
 }
 
-struct FolderStatus: Decodable, Sendable {
+struct FolderStatus: Decodable, Equatable, Sendable {
     let state: String
     let globalBytes: Int64
     let inSyncBytes: Int64
@@ -63,12 +63,12 @@ struct FolderStatus: Decodable, Sendable {
     }
 }
 
-struct PendingDevice: Identifiable, Sendable {
+struct PendingDevice: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
 }
 
-struct PendingFolder: Identifiable, Sendable {
+struct PendingFolder: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     let deviceID: String
@@ -168,7 +168,10 @@ final class SyncthingAPI {
         let value = try await json("/rest/cluster/pending/devices") as? [String: [String: Any]] ?? [:]
         return value.map { key, info in
             PendingDevice(id: key, name: info["name"] as? String ?? info["deviceName"] as? String ?? key)
-        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }.sorted {
+            let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
     }
 
     func pendingFolders() async throws -> [PendingFolder] {
@@ -183,6 +186,11 @@ final class SyncthingAPI {
             return offers.map { deviceID, offer in
                 PendingFolder(id: folderID, name: offer["label"] as? String ?? folderID, deviceID: deviceID)
             }
+        }.sorted {
+            let nameOrder = $0.name.localizedCaseInsensitiveCompare($1.name)
+            if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
+            if $0.id != $1.id { return $0.id < $1.id }
+            return $0.deviceID < $1.deviceID
         }
     }
 

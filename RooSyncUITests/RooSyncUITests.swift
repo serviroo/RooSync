@@ -290,8 +290,12 @@ final class RooSyncUITests: XCTestCase {
                 folderListFrame.contains(peerFrame)
         }
         var pairedDeviceTapped = false
-        for _ in 0..<30 {
-            folderList.swipeUp()
+        let scrollStart = folderList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+        let scrollEnd = folderList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+        for attempt in 0..<24 {
+            if attempt > 0 {
+                scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
+            }
             guard pairedDevice.waitForExistence(timeout: 1) else { continue }
             let hittable = XCTNSPredicateExpectation(
                 predicate: NSPredicate { element, _ in
@@ -303,7 +307,7 @@ final class RooSyncUITests: XCTestCase {
                 },
                 object: pairedDevice
             )
-            guard XCTWaiter.wait(for: [hittable], timeout: 1) == .completed else { continue }
+            guard XCTWaiter.wait(for: [hittable], timeout: 2) == .completed else { continue }
 
             let peerFrame = pairedDevice.frame
             let appFrame = app.frame
