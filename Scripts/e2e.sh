@@ -912,6 +912,24 @@ done
 [[ "$APP_FOLDER" == "$APP_DATA/Documents/Vaults/"* && -d "$APP_FOLDER" ]] || \
 	fail "The simulator did not rebase its E2E vault after the UI-test app container changed."
 
+PLUS_FOLDER_ID="notes+work"
+PLUS_FOLDER_LABEL="Plus ID E2E Folder"
+PLUS_FOLDER_PATH="$APP_DATA/Documents/Vaults/$PLUS_FOLDER_LABEL"
+mkdir -p "$PLUS_FOLDER_PATH"
+add_folder_config "$APP_REST" "$APP_API_KEY" "$PLUS_FOLDER_ID" "$PLUS_FOLDER_LABEL" "$PLUS_FOLDER_PATH" ""
+xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+	-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+	-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+	-maximum-concurrent-test-simulator-destinations 1 \
+	CODE_SIGNING_ALLOWED=NO test-without-building \
+	-only-testing:RooSyncUITests/RooSyncUITests/testFolderStatusHandlesPlusInFolderID \
+	-resultBundlePath "$E2E_DIR/PlusFolderStatus-E2E.xcresult" >"$E2E_DIR/plus-folder-status-test.log" 2>&1 || {
+	grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/plus-folder-status-test.log" | tail -80 >&2 || true
+	fail "Real-core plus-folder-ID UI E2E failed; see $E2E_DIR/plus-folder-status-test.log."
+}
+printf '%s\n' 'PASS: embedded-core status resolved the exact plus-containing folder ID.'
+
 E2E_FOLDERS="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/folders)"
 python3 -c 'import json,sys; folders=json.loads(sys.argv[1]); by_id={f["id"]:f for f in folders}; main=by_id.get(sys.argv[2], {}); existing=by_id.get(sys.argv[6], {}); slash=by_id.get("roosync-e2e-slash-label", {}); empty=by_id.get("roosync-e2e-empty-label", {}); assert main.get("label")==sys.argv[3] and main.get("path")==sys.argv[4] and any(d.get("deviceID")==sys.argv[5] for d in main.get("devices", [])); assert existing.get("path")==sys.argv[7] and existing.get("label")=="Existing E2E Offer" and any(d.get("deviceID")==sys.argv[5] for d in existing.get("devices", [])); assert slash.get("label")=="Incoming/Notes" and slash.get("path", "").startswith(sys.argv[8]+"/") and "/" not in slash["path"].split("/")[-1]; assert empty.get("label")=="roosync-e2e-empty-label" and empty.get("path", "").startswith(sys.argv[8]+"/")' \
 	"$E2E_FOLDERS" "$APP_FOLDER_ID" "$APP_FOLDER_LABEL" "$APP_FOLDER" "$PEER_ID" "$EXISTING_OFFER_ID" "$APP_DATA/Documents/Vaults/Existing E2E Offer" "$APP_DATA/Documents/Vaults" || \

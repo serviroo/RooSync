@@ -163,6 +163,27 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testFolderStatusHandlesPlusInFolderID() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let folderList = app.collectionViews.firstMatch
+        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
+        let folderRow = app.descendants(matching: .any)
+            .matching(identifier: "folder-row-notes+work")
+            .firstMatch
+        for _ in 0..<12 {
+            if folderRow.exists && folderRow.isHittable { break }
+            folderList.swipeUp()
+        }
+        XCTAssertTrue(folderRow.waitForExistence(timeout: 30))
+        XCTAssertTrue(
+            folderRow.staticTexts["Up to date"].waitForExistence(timeout: 30),
+            "The embedded core did not resolve status for the exact plus-containing folder ID."
+        )
+    }
+
+    @MainActor
     func testCannotAddLocalDeviceID() {
         let app = XCUIApplication()
         app.launch()

@@ -326,6 +326,7 @@ final class SyncthingAPI {
         components.port = 8384
         components.percentEncodedPath = path
         components.queryItems = query.isEmpty ? nil : query
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = components.url else { throw APIError.invalidURL }
         var request = URLRequest(url: url)
         request.httpMethod = method
