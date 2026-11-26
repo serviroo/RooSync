@@ -289,45 +289,46 @@ final class RooSyncUITests: XCTestCase {
                 appFrame.contains(peerFrame) &&
                 folderListFrame.contains(peerFrame)
         }
+        let isInSafeViewport: (CGRect, CGRect, CGRect) -> Bool = { peerFrame, appFrame, folderListFrame in
+            guard isVisiblePeerFrame(peerFrame, appFrame, folderListFrame) else { return false }
+            let navBar = app.navigationBars.firstMatch
+            let topLimit: CGFloat
+            if navBar.exists {
+                let navMaxY = navBar.frame.maxY
+                topLimit = navMaxY.isFinite ? max(folderListFrame.minY, navMaxY + 4) : folderListFrame.minY + min(100, folderListFrame.height * 0.15)
+            } else {
+                topLimit = folderListFrame.minY + min(100, folderListFrame.height * 0.15)
+            }
+            let bottomLimit = folderListFrame.maxY - min(50, folderListFrame.height * 0.08)
+            return peerFrame.minY >= topLimit && peerFrame.maxY <= bottomLimit
+        }
         var pairedDeviceTapped = false
-        let scrollStart = folderList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
-        let scrollEnd = folderList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+        let scrollStart = folderList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+        let scrollEnd = folderList.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
         for attempt in 0..<24 {
             if attempt > 0 {
                 scrollStart.press(forDuration: 0.05, thenDragTo: scrollEnd)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.35))
             }
-            guard pairedDevice.waitForExistence(timeout: 1) else { continue }
-            let hittable = XCTNSPredicateExpectation(
-                predicate: NSPredicate { element, _ in
-                    guard let element = element as? XCUIElement else { return false }
-                    let peerFrame = element.frame
-                    let appFrame = app.frame
-                    let folderListFrame = folderList.frame
-                    return isVisiblePeerFrame(peerFrame, appFrame, folderListFrame) && element.isHittable
-                },
-                object: pairedDevice
-            )
-            guard XCTWaiter.wait(for: [hittable], timeout: 2) == .completed else { continue }
-
+            guard pairedDevice.exists else { continue }
             let peerFrame = pairedDevice.frame
             let appFrame = app.frame
             let folderListFrame = folderList.frame
-            guard isVisiblePeerFrame(peerFrame, appFrame, folderListFrame),
-                  pairedDevice.isHittable else { continue }
-            let peerTapOffset = CGVector(
-                dx: (peerFrame.midX - appFrame.minX) / appFrame.width,
-                dy: (peerFrame.midY - appFrame.minY) / appFrame.height
-            )
-            let peerTap = app.coordinate(withNormalizedOffset: peerTapOffset)
+            guard isInSafeViewport(peerFrame, appFrame, folderListFrame) else { continue }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
             guard pairedDevice.exists else { continue }
             let tapFrame = pairedDevice.frame
             let tapAppFrame = app.frame
             let tapFolderListFrame = folderList.frame
             guard tapFrame == peerFrame,
                   tapAppFrame == appFrame,
-                  isVisiblePeerFrame(tapFrame, tapAppFrame, tapFolderListFrame),
+                  isInSafeViewport(tapFrame, tapAppFrame, tapFolderListFrame),
                   pairedDevice.isHittable else { continue }
-            peerTap.tap()
+            let peerTapOffset = CGVector(
+                dx: (tapFrame.midX - tapAppFrame.minX) / tapAppFrame.width,
+                dy: (tapFrame.midY - tapAppFrame.minY) / tapAppFrame.height
+            )
+            app.coordinate(withNormalizedOffset: peerTapOffset).tap()
             pairedDeviceTapped = true
             break
         }
@@ -739,15 +740,25 @@ final class RooSyncUITests: XCTestCase {
 
     @MainActor
     private func openE2EFolder(in app: XCUIApplication) {
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
         let folderList = app.collectionViews.firstMatch
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let folder = app.descendants(matching: .any)
             .matching(identifier: "folder-row-roosync-e2e-vault")
             .firstMatch
         for _ in 0..<12 {
-            if folder.exists,
-               folder.frame.minY >= folderList.frame.minY,
-               folder.frame.maxY <= folderList.frame.maxY { break }
+            if folder.exists {
+                let folderFrame = folder.frame
+                let listFrame = folderList.frame
+                if !folderFrame.isEmpty,
+                   folderFrame.minY.isFinite,
+                   folderFrame.maxY.isFinite,
+                   folderFrame.minY >= listFrame.minY,
+                   folderFrame.maxY <= listFrame.maxY,
+                   folder.isHittable {
+                    break
+                }
+            }
             folderList.swipeUp()
         }
         XCTAssertTrue(folder.waitForExistence(timeout: 30))

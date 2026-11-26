@@ -220,16 +220,22 @@ private struct DeviceIdentityView: View {
         }
     }
 
+    @MainActor
+    private static var qrCache: [String: UIImage] = [:]
+
     private func makeQRCode(_ value: String) -> UIImage? {
-        guard !value.isEmpty,
-              let data = value.data(using: .utf8),
+        guard !value.isEmpty else { return nil }
+        if let cached = Self.qrCache[value] { return cached }
+        guard let data = value.data(using: .utf8),
               let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
         filter.setValue(data, forKey: "inputMessage")
         filter.setValue("M", forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage else { return nil }
         let scaled = output.transformed(by: CGAffineTransform(scaleX: 8, y: 8))
         guard let cgImage = CIContext().createCGImage(scaled, from: scaled.extent) else { return nil }
-        return UIImage(cgImage: cgImage)
+        let image = UIImage(cgImage: cgImage)
+        Self.qrCache[value] = image
+        return image
     }
 }
 
@@ -403,6 +409,7 @@ private struct AddFolderView: View {
             .fileImporter(isPresented: $showingPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                 guard case let .success(urls) = result, let url = urls.first else { return }
                 Task {
+                    try? await Task.sleep(for: .milliseconds(400))
                     await addExternal(url)
                 }
             }
