@@ -1,0 +1,498 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		2228C939D03ADE5E28EACAE1 /* Shortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = C163A1FBB913DB26CADE4C14 /* Shortcuts.swift */; };
+		2AD769B9006977CE804AFB1B /* RooSyncApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9AB6F817E92ABDE26D95EA70 /* RooSyncApp.swift */; };
+		30514577DBE767CFB49BE682 /* RooSyncUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376D4966FFC3D5E3D840C238 /* RooSyncUITests.swift */; };
+		7196D1D1499A43E50DDC1677 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8F390A8EC634007CEBAACEA6 /* AppIntents.framework */; };
+		96A962B3479C7FF1F4C1D10C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E2D7F935BD7485068974DDFE /* Assets.xcassets */; };
+		B6285DA40DAEF7089DA685CD /* RooSyncCore.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = EC18F378DA9A9C0475FBA9BD /* RooSyncCore.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B6CB87F7F28981CF6168443C /* RooSyncCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = EC18F378DA9A9C0475FBA9BD /* RooSyncCore.xcframework */; };
+		C1CFC0221E454E19252396AC /* SyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 197CC8BD9C6108D640778AD9 /* SyncStore.swift */; };
+		E6B4E0C2EDBF023C06F16B03 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1BC27169961CBAD1E76B4A0 /* ContentView.swift */; };
+		F676D4ED76026F979ABA67A1 /* SyncthingAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D51981D6686D8878A65F25 /* SyncthingAPI.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7A4440F6FCF26699A4D797E7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FCF324D3B11E8356DCEC20B8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9979CDA567D2BEA1FCA2869D;
+			remoteInfo = RooSync;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		18A66D94DC445C37F93E16C9 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				B6285DA40DAEF7089DA685CD /* RooSyncCore.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		197CC8BD9C6108D640778AD9 /* SyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncStore.swift; sourceTree = "<group>"; };
+		27ED246C3EE591EE23583ECF /* RooSyncUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RooSyncUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		28D90F5DD73EDD5F22347EB1 /* RooSync.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = RooSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		376D4966FFC3D5E3D840C238 /* RooSyncUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RooSyncUITests.swift; sourceTree = "<group>"; };
+		66D51981D6686D8878A65F25 /* SyncthingAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncthingAPI.swift; sourceTree = "<group>"; };
+		8F390A8EC634007CEBAACEA6 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		9AB6F817E92ABDE26D95EA70 /* RooSyncApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RooSyncApp.swift; sourceTree = "<group>"; };
+		AA068B466EBBAADFAE752E33 /* RooSync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RooSync.entitlements; sourceTree = "<group>"; };
+		C163A1FBB913DB26CADE4C14 /* Shortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shortcuts.swift; sourceTree = "<group>"; };
+		E2D7F935BD7485068974DDFE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EA3CA2EAA4CA1D2E071A33A5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EC18F378DA9A9C0475FBA9BD /* RooSyncCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = RooSyncCore.xcframework; path = Frameworks/RooSyncCore.xcframework; sourceTree = "<group>"; };
+		F1BC27169961CBAD1E76B4A0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		F45F037C818451DDCA0A5FF9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B6CB87F7F28981CF6168443C /* RooSyncCore.xcframework in Frameworks */,
+				7196D1D1499A43E50DDC1677 /* AppIntents.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0C0EC3D33FAA315089F273FA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				28D90F5DD73EDD5F22347EB1 /* RooSync.app */,
+				27ED246C3EE591EE23583ECF /* RooSyncUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		5FAB2C403667BA5970C0F1F9 /* RooSync */ = {
+			isa = PBXGroup;
+			children = (
+				E2D7F935BD7485068974DDFE /* Assets.xcassets */,
+				F1BC27169961CBAD1E76B4A0 /* ContentView.swift */,
+				EA3CA2EAA4CA1D2E071A33A5 /* Info.plist */,
+				AA068B466EBBAADFAE752E33 /* RooSync.entitlements */,
+				9AB6F817E92ABDE26D95EA70 /* RooSyncApp.swift */,
+				C163A1FBB913DB26CADE4C14 /* Shortcuts.swift */,
+				197CC8BD9C6108D640778AD9 /* SyncStore.swift */,
+				66D51981D6686D8878A65F25 /* SyncthingAPI.swift */,
+			);
+			path = RooSync;
+			sourceTree = "<group>";
+		};
+		7D8F9B476D96C334010B36FB = {
+			isa = PBXGroup;
+			children = (
+				5FAB2C403667BA5970C0F1F9 /* RooSync */,
+				8AE10F0F492FA3FC17467C75 /* RooSyncUITests */,
+				D23522A92B2C873D8EDA2585 /* Frameworks */,
+				0C0EC3D33FAA315089F273FA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8AE10F0F492FA3FC17467C75 /* RooSyncUITests */ = {
+			isa = PBXGroup;
+			children = (
+				376D4966FFC3D5E3D840C238 /* RooSyncUITests.swift */,
+			);
+			path = RooSyncUITests;
+			sourceTree = "<group>";
+		};
+		D23522A92B2C873D8EDA2585 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8F390A8EC634007CEBAACEA6 /* AppIntents.framework */,
+				EC18F378DA9A9C0475FBA9BD /* RooSyncCore.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1CA99B83A1E6EC7F7F5EAB6E /* RooSyncUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EAD3601D29C8A9A12FFD808F /* Build configuration list for PBXNativeTarget "RooSyncUITests" */;
+			buildPhases = (
+				5EF44CFF687020655589450D /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9AEBED12B1B47745F30504E4 /* PBXTargetDependency */,
+			);
+			name = RooSyncUITests;
+			packageProductDependencies = (
+			);
+			productName = RooSyncUITests;
+			productReference = 27ED246C3EE591EE23583ECF /* RooSyncUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		9979CDA567D2BEA1FCA2869D /* RooSync */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA0370A83D16EF8FE5DB47E4 /* Build configuration list for PBXNativeTarget "RooSync" */;
+			buildPhases = (
+				C9D164EBFEBF8730EB5949DF /* Sources */,
+				4B367B62AD1A3FFA359193E9 /* Resources */,
+				F45F037C818451DDCA0A5FF9 /* Frameworks */,
+				18A66D94DC445C37F93E16C9 /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RooSync;
+			packageProductDependencies = (
+			);
+			productName = RooSync;
+			productReference = 28D90F5DD73EDD5F22347EB1 /* RooSync.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FCF324D3B11E8356DCEC20B8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					1CA99B83A1E6EC7F7F5EAB6E = {
+						ProvisioningStyle = Automatic;
+						TestTargetID = 9979CDA567D2BEA1FCA2869D;
+					};
+					9979CDA567D2BEA1FCA2869D = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 206F92E244597A29E8F8A572 /* Build configuration list for PBXProject "RooSync" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7D8F9B476D96C334010B36FB;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0C0EC3D33FAA315089F273FA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9979CDA567D2BEA1FCA2869D /* RooSync */,
+				1CA99B83A1E6EC7F7F5EAB6E /* RooSyncUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4B367B62AD1A3FFA359193E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				96A962B3479C7FF1F4C1D10C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5EF44CFF687020655589450D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				30514577DBE767CFB49BE682 /* RooSyncUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9D164EBFEBF8730EB5949DF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E6B4E0C2EDBF023C06F16B03 /* ContentView.swift in Sources */,
+				2AD769B9006977CE804AFB1B /* RooSyncApp.swift in Sources */,
+				2228C939D03ADE5E28EACAE1 /* Shortcuts.swift in Sources */,
+				C1CFC0221E454E19252396AC /* SyncStore.swift in Sources */,
+				F676D4ED76026F979ABA67A1 /* SyncthingAPI.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9AEBED12B1B47745F30504E4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9979CDA567D2BEA1FCA2869D /* RooSync */;
+			targetProxy = 7A4440F6FCF26699A4D797E7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2E3AA6868A881ABFB4944475 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = RooSyncUITests;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "RooSync UI tests access the local Syncthing REST API.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.rooindustries.roosync.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RooSync;
+			};
+			name = Debug;
+		};
+		490548AF338721FD8881A765 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RooSync/RooSync.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Frameworks\"",
+				);
+				INFOPLIST_FILE = RooSync/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RooSync;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "$(inherited) -lresolv";
+				PRODUCT_BUNDLE_IDENTIFIER = com.rooindustries.roosync;
+				PRODUCT_NAME = RooSync;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5A5C043523499FC9737C781D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = RooSyncUITests;
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "RooSync UI tests access the local Syncthing REST API.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.rooindustries.roosync.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RooSync;
+			};
+			name = Release;
+		};
+		857C94B3C479FDE2D72FA92B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8A40556664399E8EFC7E08DA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		DC71805F9F48E675801AC3D2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = RooSync/RooSync.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Frameworks\"",
+				);
+				INFOPLIST_FILE = RooSync/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RooSync;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = "$(inherited) -lresolv";
+				PRODUCT_BUNDLE_IDENTIFIER = com.rooindustries.roosync;
+				PRODUCT_NAME = RooSync;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		206F92E244597A29E8F8A572 /* Build configuration list for PBXProject "RooSync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A40556664399E8EFC7E08DA /* Debug */,
+				857C94B3C479FDE2D72FA92B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		BA0370A83D16EF8FE5DB47E4 /* Build configuration list for PBXNativeTarget "RooSync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				490548AF338721FD8881A765 /* Debug */,
+				DC71805F9F48E675801AC3D2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EAD3601D29C8A9A12FFD808F /* Build configuration list for PBXNativeTarget "RooSyncUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2E3AA6868A881ABFB4944475 /* Debug */,
+				5A5C043523499FC9737C781D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FCF324D3B11E8356DCEC20B8 /* Project object */;
+}
