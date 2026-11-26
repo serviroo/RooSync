@@ -19,8 +19,8 @@ struct ContentView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             if let warning = store.passiveRefreshWarning {
                 Text(warning)
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal)
                     .padding(.vertical, 8)
@@ -348,8 +348,8 @@ private struct AddFolderView: View {
                 if let warning = store.passiveRefreshWarning {
                     Section {
                         Text(warning)
-                            .font(.footnote)
-                            .foregroundStyle(.orange)
+                            .font(.callout)
+                            .foregroundStyle(.primary)
                             .accessibilityIdentifier("passive-refresh-warning-form")
                     }
                 }
@@ -383,6 +383,7 @@ private struct AddFolderView: View {
                         Label("Cancel", systemImage: "xmark")
                     }
                 }
+#if DEBUG
                 if store.e2eCoreControlsEnabled {
                     ToolbarItem(placement: .primaryAction) {
                         Button(store.isE2ECoreStopped ? "Restart embedded core" : "Stop embedded core") {
@@ -397,6 +398,7 @@ private struct AddFolderView: View {
                         .accessibilityIdentifier("e2e-core-control")
                     }
                 }
+#endif
             }
             .fileImporter(isPresented: $showingPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                 guard case let .success(urls) = result, let url = urls.first else { return }

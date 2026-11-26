@@ -35,7 +35,9 @@ final class SyncStore: ObservableObject {
     @Published private(set) var foldersNeedingReauthorization = Set<String>()
     @Published private(set) var errorMessage: String?
     @Published private(set) var passiveRefreshWarning: String?
+#if DEBUG
     @Published private(set) var isE2ECoreStopped = false
+#endif
     @Published private(set) var isCellular = false
     @Published private(set) var isOnBattery = false
     @Published var preferences = NetworkPreferences()
@@ -44,10 +46,12 @@ final class SyncStore: ObservableObject {
     private let api: SyncthingAPI
     private let apiKey: String
     private let coreStartupTask: Task<Void, Error>
+#if DEBUG
     private let coreConfigDirectory: URL
     private let coreDataDirectory: URL
     private let coreDefaultFolder: URL
     let e2eCoreControlsEnabled: Bool
+#endif
     private let pathMonitor = NWPathMonitor()
     private let pathQueue = DispatchQueue(label: "com.rooindustries.roosync.network")
     private var refreshTask: Task<Void, Never>?
@@ -66,10 +70,12 @@ final class SyncStore: ObservableObject {
         let defaultFolder = documents.appendingPathComponent("RooSync", isDirectory: true)
         let configDirectory = support.appendingPathComponent("config", isDirectory: true)
         let dataDirectory = support.appendingPathComponent("data", isDirectory: true)
+#if DEBUG
         coreDefaultFolder = defaultFolder
         coreConfigDirectory = configDirectory
         coreDataDirectory = dataDirectory
         e2eCoreControlsEnabled = ProcessInfo.processInfo.arguments.contains("--roosync-e2e-core-controls")
+#endif
         let startupAPIKey = apiKey
         coreStartupTask = Task.detached(priority: .userInitiated) {
             try GoCoreBridge.start(
@@ -90,7 +96,7 @@ final class SyncStore: ObservableObject {
         pathMonitor.pathUpdateHandler = { [weak self] path in
             Task { @MainActor [weak self] in
                 self?.isCellular = path.usesInterfaceType(.cellular)
-                await self?.applyPowerPolicy()
+                await self?.applyPowerPolicy(isPassive: true)
             }
         }
         pathMonitor.start(queue: pathQueue)
@@ -102,7 +108,7 @@ final class SyncStore: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.isOnBattery = UIDevice.current.batteryState == .unplugged
-                await self.applyPowerPolicy()
+                await self.applyPowerPolicy(isPassive: true)
                 self.updateKeepAwake()
             }
         }
@@ -142,34 +148,35 @@ final class SyncStore: ObservableObject {
             } catch {
                 pendingFolderWarning = error.localizedDescription
             }
+            var statusWarning: String?
             for folder in folders {
-                if let status = try? await api.folderStatus(folder.id) {
+                do {
+                    let status = try await api.folderStatus(folder.id)
                     statuses[folder.id] = status
-                } else {
+                } catch {
                     statuses.removeValue(forKey: folder.id)
+                    statusWarning = statusWarning ?? error.localizedDescription
                 }
             }
-            await loadNetworkPreferences()
+            try await loadNetworkPreferences()
             try await applyLANRestriction(preferences.lanOnly)
             let reauthorizationWarning = foldersNeedingReauthorization.isEmpty
                 ? nil
                 : "RooSync needs folder access again. Open each affected folder and choose its location."
+            let refreshWarning = reauthorizationWarning ?? statusWarning
             if isPassive {
-                passiveRefreshWarning = reauthorizationWarning
+                passiveRefreshWarning = refreshWarning
             } else {
                 passiveRefreshWarning = nil
-                errorMessage = reauthorizationWarning
+                errorMessage = refreshWarning
             }
-            await applyPowerPolicy()
+            await applyPowerPolicy(isPassive: isPassive)
         } catch {
-            if isPassive {
-                passiveRefreshWarning = error.localizedDescription
-            } else {
-                errorMessage = error.localizedDescription
-            }
+            reportRefreshError(error, isPassive: isPassive)
         }
     }
 
+#if DEBUG
     func stopCoreForE2ETest() async {
         guard e2eCoreControlsEnabled, !isE2ECoreStopped else { return }
         do {
@@ -200,6 +207,7 @@ final class SyncStore: ObservableObject {
             errorMessage = error.localizedDescription
         }
     }
+#endif
 
     func syncNow(window: Duration = .seconds(20)) async -> Bool {
         let clock = ContinuousClock()
@@ -212,7 +220,7 @@ final class SyncStore: ObservableObject {
             try await reconcileAppDocumentsFolderPaths()
             folders = try await loadConfiguredFolders()
             foldersLoaded = true
-            await loadNetworkPreferences()
+            try await loadNetworkPreferences()
             try await applyLANRestriction(preferences.lanOnly)
             await applyPowerPolicy()
             folders = try await loadConfiguredFolders()
@@ -512,7 +520,15 @@ final class SyncStore: ObservableObject {
         errorMessage = error.localizedDescription
     }
 
-    private func applyPowerPolicy() async {
+    private func reportRefreshError(_ error: Error, isPassive: Bool) {
+        if isPassive {
+            passiveRefreshWarning = error.localizedDescription
+        } else {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func applyPowerPolicy(isPassive: Bool = false) async {
         guard foldersLoaded else { return }
         var changed = false
         if isPolicyRestricted {
@@ -522,7 +538,7 @@ final class SyncStore: ObservableObject {
                     policyPausedFolders.insert(folder.id)
                     changed = true
                 } catch {
-                    errorMessage = error.localizedDescription
+                    reportRefreshError(error, isPassive: isPassive)
                 }
             }
         } else {
@@ -532,15 +548,19 @@ final class SyncStore: ObservableObject {
                     policyPausedFolders.remove(folder.id)
                     changed = true
                 } catch {
-                    errorMessage = error.localizedDescription
+                    reportRefreshError(error, isPassive: isPassive)
                 }
             }
         }
         let currentFolderIDs = Set(folders.map(\.id))
         policyPausedFolders.formIntersection(currentFolderIDs)
         savePolicyPausedFolders()
-        if changed, let updatedFolders = try? await loadConfiguredFolders() {
-            folders = updatedFolders
+        if changed {
+            do {
+                folders = try await loadConfiguredFolders()
+            } catch {
+                reportRefreshError(error, isPassive: isPassive)
+            }
         }
     }
 
@@ -549,8 +569,8 @@ final class SyncStore: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = sceneIsActive && preferences.keepAliveWhileCharging && charging
     }
 
-    private func loadNetworkPreferences() async {
-        guard let values = try? await api.options() else { return }
+    private func loadNetworkPreferences() async throws {
+        let values = try await api.options()
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: "networkPreferencesSaved") {
             preferences.discoveryEnabled = defaults.object(forKey: "discoveryEnabled") as? Bool ?? true
@@ -757,7 +777,6 @@ final class SyncStore: ObservableObject {
             pendingFolders = []
             foldersLoaded = false
             let error = SyncStoreError.canonicalFolderIDCollision
-            errorMessage = error.localizedDescription
             throw error
         }
         return loadedFolders
@@ -844,6 +863,7 @@ private enum GoCoreBridge {
         }
     }
 
+#if DEBUG
     static func stop() throws {
         var error: NSError?
         let stopped = RoosyncmobileStopCore(&error)
@@ -851,6 +871,7 @@ private enum GoCoreBridge {
             throw error ?? SyncStoreError.coreStartFailed
         }
     }
+#endif
 }
 
 private enum APIKeyStore {

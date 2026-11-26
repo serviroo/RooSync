@@ -287,8 +287,7 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 15))
         name.tap()
         name.typeText("Passive failure draft")
-        folderID.tap()
-        folderID.typeText("passive-refresh-draft")
+        XCTAssertEqual(folderID.value as? String, "passive-failure-draft")
 
         let coreControl = app.buttons["e2e-core-control"]
         XCTAssertTrue(coreControl.waitForExistence(timeout: 15))
@@ -298,12 +297,15 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(warning.isHittable)
         XCTAssertFalse(app.alerts["RooSync"].exists)
         XCTAssertEqual(name.value as? String, "Passive failure draft")
-        XCTAssertEqual(folderID.value as? String, "passive-refresh-draft")
+        XCTAssertEqual(folderID.value as? String, "passive-failure-draft")
 
-        coreControl.tap()
+        let restartControl = app.buttons["Restart embedded core"]
+        XCTAssertTrue(restartControl.waitForExistence(timeout: 15))
+        XCTAssertTrue(restartControl.isHittable)
+        restartControl.tap()
         XCTAssertTrue(warning.waitForNonExistence(timeout: 30))
         XCTAssertEqual(name.value as? String, "Passive failure draft")
-        XCTAssertEqual(folderID.value as? String, "passive-refresh-draft")
+        XCTAssertEqual(folderID.value as? String, "passive-failure-draft")
         app.buttons["Cancel"].tap()
     }
 
@@ -329,75 +331,63 @@ final class RooSyncUITests: XCTestCase {
             serviceState.name = "Document manager service state"
             serviceState.lifetime = .keepAlways
             add(serviceState)
-            attachDocumentPickerDiagnostics(in: app, picker: nil, state: "Picker-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Picker-unavailable")
             XCTFail("The active document manager picker did not appear.")
             return
         }
-        let pickerView = documentManager.otherElements
-            .matching(identifier: "Browse View (Picker)")
-            .firstMatch
-        guard pickerView.waitForExistence(timeout: 5) else {
-            let serviceHierarchy = XCTAttachment(string: String(documentManager.debugDescription.prefix(20000)))
-            serviceHierarchy.name = "Document manager picker accessibility hierarchy"
-            serviceHierarchy.lifetime = .keepAlways
-            add(serviceHierarchy)
-            attachDocumentPickerDiagnostics(in: app, picker: nil, state: "Picker-unavailable")
-            XCTFail("The active document manager picker did not appear.")
-            return
-        }
-        let browse = pickerView.buttons["Browse"]
+        let browse = documentManager.buttons["Browse"]
         guard browse.waitForExistence(timeout: 5) else {
-            attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Browse-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Browse-unavailable")
             XCTFail("The active document manager picker did not expose Browse from Recents.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Recents")
+        attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Recents")
         if !browse.isSelected { browse.tap() }
 
-        let onMyIPhone = pickerView.descendants(matching: .any)
+        let onMyIPhone = documentManager.descendants(matching: .any)
             .matching(NSPredicate(format: "label CONTAINS %@", "On My iPhone"))
             .firstMatch
         guard onMyIPhone.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "On-My-iPhone-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "On-My-iPhone-unavailable")
             XCTFail("Browse did not expose On My iPhone.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Browse")
+        attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Browse")
         onMyIPhone.tap()
 
-        let rooSyncContainer = pickerView.cells.matching(identifier: "RooSync, Container").firstMatch
+        let rooSyncContainer = documentManager.cells.matching(identifier: "RooSync, Container").firstMatch
         guard rooSyncContainer.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "RooSync-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "RooSync-unavailable")
             XCTFail("On My iPhone did not expose the RooSync container.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "On-My-iPhone")
+        attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "On-My-iPhone")
         rooSyncContainer.tap()
 
-        let vaults = pickerView.cells
+        let vaults = documentManager.cells
             .matching(NSPredicate(format: "label BEGINSWITH %@", "Vaults"))
             .firstMatch
         guard vaults.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Vaults-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Vaults-unavailable")
             XCTFail("The RooSync container did not expose Vaults.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "RooSync")
+        attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "RooSync")
         vaults.tap()
 
-        let candidate = pickerView.cells
+        let candidate = documentManager.cells
             .matching(NSPredicate(format: "label BEGINSWITH %@", "RooSync E2E Vault"))
             .firstMatch
         guard candidate.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Vault-candidate-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Vault-candidate-unavailable")
             XCTFail("Vaults did not expose the RooSync E2E Vault folder.")
             return
         }
-        attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Vaults")
+        attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Vaults")
         candidate.tap()
-        let open = pickerView.buttons["Open"]
+        let open = documentManager.buttons["Open"]
         guard open.waitForExistence(timeout: 15) else {
-            attachDocumentPickerDiagnostics(in: app, picker: pickerView, state: "Open-unavailable")
+            attachDocumentPickerDiagnostics(in: app, picker: nil, service: documentManager, state: "Open-unavailable")
             XCTFail("The selected vault did not expose Open.")
             return
         }
@@ -525,13 +515,25 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func attachDocumentPickerDiagnostics(in app: XCUIApplication, picker: XCUIElement?, state: String) {
-        let pickerHierarchy = picker.map { String($0.debugDescription.prefix(20000)) } ?? String(app.debugDescription.prefix(20000))
-        let hierarchy = XCTAttachment(string: "Host app state: \(app.state.rawValue)\n\(pickerHierarchy)")
-        hierarchy.name = "Document picker \(state) accessibility hierarchy"
-        hierarchy.lifetime = .keepAlways
-        add(hierarchy)
-        let hostHierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
+    private func attachDocumentPickerDiagnostics(
+        in app: XCUIApplication,
+        picker: XCUIElement?,
+        service: XCUIApplication? = nil,
+        state: String
+    ) {
+        if let service {
+            let serviceHierarchy = XCTAttachment(string: service.debugDescription)
+            serviceHierarchy.name = "Document manager service \(state) accessibility hierarchy"
+            serviceHierarchy.lifetime = .keepAlways
+            add(serviceHierarchy)
+        }
+        if let picker {
+            let pickerHierarchy = XCTAttachment(string: picker.debugDescription)
+            pickerHierarchy.name = "Document picker \(state) accessibility hierarchy"
+            pickerHierarchy.lifetime = .keepAlways
+            add(pickerHierarchy)
+        }
+        let hostHierarchy = XCTAttachment(string: "Host app state: \(app.state.rawValue)\n\(app.debugDescription)")
         hostHierarchy.name = "Host app \(state) accessibility hierarchy"
         hostHierarchy.lifetime = .keepAlways
         add(hostHierarchy)
