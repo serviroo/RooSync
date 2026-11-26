@@ -241,10 +241,10 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(foldersTab.waitForExistence(timeout: 15))
         let pairedDevice = app.staticTexts["paired-device-name-Docker Syncthing E2E"]
         for _ in 0..<12 {
-            if pairedDevice.exists && pairedDevice.frame.maxY < foldersTab.frame.minY { break }
             folderList.swipeUp()
         }
-        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
+        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15), "The Docker Syncthing device did not appear after scrolling the folder list.")
+        XCTAssertTrue(pairedDevice.frame.maxY < foldersTab.frame.minY)
         XCTAssertTrue(pairedDevice.isHittable)
         pairedDevice.tap()
         XCTAssertFalse(
