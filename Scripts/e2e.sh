@@ -377,6 +377,9 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	fail "Simulator app and UI-test build failed; see $E2E_DIR/build.log."
 }
 
+xcrun simctl boot "$SIMULATOR_UDID" >/dev/null 2>&1 || true
+xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+
 APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphonesimulator/RooSync.app"
 xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 APP_INSTALLED=1
