@@ -239,16 +239,17 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let foldersTab = app.buttons["Folders"]
         XCTAssertTrue(foldersTab.waitForExistence(timeout: 15))
-        let pairedDevice = app.staticTexts["paired-device-name-Docker Syncthing E2E"]
+        let pairedDevice = app.descendants(matching: .any)["paired-device-name-Docker Syncthing E2E"]
         for _ in 0..<30 {
-            folderList.swipeUp()
             if pairedDevice.waitForExistence(timeout: 1),
-               pairedDevice.frame.maxY < foldersTab.frame.minY {
+               folderList.frame.contains(pairedDevice.frame),
+               pairedDevice.isHittable {
                 break
             }
+            folderList.swipeUp()
         }
         XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15), "The Docker Syncthing device did not appear after scrolling the folder list.")
-        XCTAssertTrue(pairedDevice.frame.maxY < foldersTab.frame.minY)
+        XCTAssertTrue(folderList.frame.contains(pairedDevice.frame))
         XCTAssertTrue(pairedDevice.isHittable)
         pairedDevice.tap()
         XCTAssertFalse(
