@@ -276,39 +276,53 @@ final class RooSyncUITests: XCTestCase {
         let pairedDevice = app.descendants(matching: .any)
             .matching(identifier: "paired-device-name-Docker Syncthing E2E")
             .firstMatch
+        let isVisiblePeerFrame: (CGRect, CGRect, CGRect) -> Bool = { peerFrame, appFrame, folderListFrame in
+            !peerFrame.isEmpty &&
+                peerFrame.minX.isFinite &&
+                peerFrame.minY.isFinite &&
+                peerFrame.maxX.isFinite &&
+                peerFrame.maxY.isFinite &&
+                appFrame.width > 0 &&
+                appFrame.height > 0 &&
+                folderListFrame.width > 0 &&
+                folderListFrame.height > 0 &&
+                appFrame.contains(peerFrame) &&
+                folderListFrame.contains(peerFrame)
+        }
         var pairedDeviceTapped = false
         for _ in 0..<30 {
             folderList.swipeUp()
             guard pairedDevice.waitForExistence(timeout: 1) else { continue }
             let hittable = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "isHittable == true"),
+                predicate: NSPredicate { element, _ in
+                    guard let element = element as? XCUIElement else { return false }
+                    let peerFrame = element.frame
+                    let appFrame = app.frame
+                    let folderListFrame = folderList.frame
+                    return isVisiblePeerFrame(peerFrame, appFrame, folderListFrame) && element.isHittable
+                },
                 object: pairedDevice
             )
             guard XCTWaiter.wait(for: [hittable], timeout: 1) == .completed else { continue }
 
             let peerFrame = pairedDevice.frame
             let appFrame = app.frame
-            guard appFrame.width > 0,
-                  appFrame.height > 0,
-                  appFrame.contains(peerFrame),
-                  folderList.frame.contains(peerFrame),
+            let folderListFrame = folderList.frame
+            guard isVisiblePeerFrame(peerFrame, appFrame, folderListFrame),
                   pairedDevice.isHittable else { continue }
             let peerTapOffset = CGVector(
                 dx: (peerFrame.midX - appFrame.minX) / appFrame.width,
                 dy: (peerFrame.midY - appFrame.minY) / appFrame.height
             )
             let peerTap = app.coordinate(withNormalizedOffset: peerTapOffset)
-            let tapExists = pairedDevice.exists
-            guard tapExists else { continue }
-            let tapIsHittable = pairedDevice.isHittable
+            guard pairedDevice.exists else { continue }
             let tapFrame = pairedDevice.frame
-            let tapFrameIsVisible = folderList.frame.contains(tapFrame)
             let tapAppFrame = app.frame
+            let tapFolderListFrame = folderList.frame
             guard tapFrame == peerFrame,
-                  tapFrameIsVisible,
                   tapAppFrame == appFrame,
-                  tapAppFrame.contains(tapFrame),
-                  tapIsHittable else { continue }
+                  isVisiblePeerFrame(tapFrame, tapAppFrame, tapFolderListFrame),
+                  pairedDevice.isHittable else { continue }
             peerTap.tap()
             pairedDeviceTapped = true
             break
@@ -396,6 +410,11 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(name.waitForExistence(timeout: 15))
         name.tap()
         name.typeText("Passive failure draft")
+        let folderIDUpdated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "passive-failure-draft"),
+            object: folderID
+        )
+        _ = XCTWaiter.wait(for: [folderIDUpdated], timeout: 5)
         XCTAssertEqual(folderID.value as? String, "passive-failure-draft")
 
         let coreControl = app.buttons["e2e-core-control"]
