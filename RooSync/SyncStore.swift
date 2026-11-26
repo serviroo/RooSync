@@ -140,14 +140,19 @@ final class SyncStore: ObservableObject {
             folders = try await loadConfiguredFolders()
             foldersLoaded = true
             devices = try await api.devices().filter { !isLocalDeviceID($0.deviceID) }
-            pendingDevices = try await api.pendingDevices()
-            pendingFolders = []
-            pendingFolderWarning = nil
+            let refreshedPendingDevices = try await api.pendingDevices()
+            let refreshedPendingFolders: [PendingFolder]
+            let refreshedPendingFolderWarning: String?
             do {
-                pendingFolders = try await api.pendingFolders()
+                refreshedPendingFolders = try await api.pendingFolders()
+                refreshedPendingFolderWarning = nil
             } catch {
-                pendingFolderWarning = error.localizedDescription
+                refreshedPendingFolders = []
+                refreshedPendingFolderWarning = error.localizedDescription
             }
+            pendingDevices = refreshedPendingDevices
+            pendingFolders = refreshedPendingFolders
+            pendingFolderWarning = refreshedPendingFolderWarning
             var statusWarning: String?
             for folder in folders {
                 do {
