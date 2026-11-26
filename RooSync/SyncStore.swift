@@ -140,7 +140,6 @@ final class SyncStore: ObservableObject {
             if bookmarksUpdated || pathsReconciled {
                 refreshedFolders = try await loadConfiguredFolders()
             }
-            foldersLoaded = true
             let refreshedDevices = try await api.devices()
                 .filter {
                     Self.canonicalDeviceID(normalizeDeviceID($0.deviceID)) != Self.canonicalDeviceID(refreshedDeviceID)
@@ -177,6 +176,7 @@ final class SyncStore: ObservableObject {
 
             if deviceID != refreshedDeviceID { deviceID = refreshedDeviceID }
             if folders != refreshedFolders { folders = refreshedFolders }
+            foldersLoaded = true
             if devices != refreshedDevices { devices = refreshedDevices }
             if pendingDevices != refreshedPendingDevices { pendingDevices = refreshedPendingDevices }
             if pendingFolders != refreshedPendingFolders { pendingFolders = refreshedPendingFolders }
