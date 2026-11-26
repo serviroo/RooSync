@@ -135,16 +135,33 @@ final class RooSyncUITests: XCTestCase {
         attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet-open")
         let copyLogs = app.cells["Copy"]
         guard copyLogs.waitForExistence(timeout: 30) else {
-            let hierarchy = XCTAttachment(string: String(app.debugDescription.prefix(20000)))
-            hierarchy.name = "\(attachmentPrefix) logs share-sheet accessibility hierarchy"
-            hierarchy.lifetime = .keepAlways
-            add(hierarchy)
+            attachLogsShareSheetHierarchy(in: app, attachmentPrefix: attachmentPrefix)
             attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet-empty")
             XCTFail("Export logs did not render a Copy action within 30 seconds.")
             return
         }
+        let copyHittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == true"),
+            object: copyLogs
+        )
+        guard XCTWaiter.wait(for: [copyHittable], timeout: 30) == .completed,
+              copyLogs.isHittable else {
+            attachLogsShareSheetHierarchy(in: app, attachmentPrefix: attachmentPrefix)
+            attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet-copy-not-hittable")
+            XCTFail("The Copy action did not become hittable within 30 seconds.")
+            return
+        }
+        attachLogsShareSheetHierarchy(in: app, attachmentPrefix: attachmentPrefix)
         attachScreenshot(named: "\(attachmentPrefix)-logs-share-sheet")
         copyLogs.tap()
+    }
+
+    @MainActor
+    private func attachLogsShareSheetHierarchy(in app: XCUIApplication, attachmentPrefix: String) {
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "\(attachmentPrefix) logs share-sheet accessibility hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
     }
 
     @MainActor
@@ -517,6 +534,48 @@ final class RooSyncUITests: XCTestCase {
             XCTAssertTrue(keepCopy.waitForExistence(timeout: 30))
             keepCopy.tap()
         }
+        XCTAssertTrue(app.staticTexts["No conflicts"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    func testConflictCopyCanBeDeleted() {
+        let app = XCUIApplication()
+        app.launch()
+        openE2EFolder(in: app)
+
+        let conflicts = app.staticTexts["Conflicts"]
+        let folderDetails = app.collectionViews.firstMatch
+        for _ in 0..<8 where !conflicts.isHittable {
+            folderDetails.swipeUp()
+        }
+        guard conflicts.waitForExistence(timeout: 15) else {
+            XCTFail("The Conflicts control did not appear.")
+            return
+        }
+        guard conflicts.isHittable else {
+            XCTFail("The Conflicts control remained unhittable after scrolling.")
+            return
+        }
+        conflicts.tap()
+
+        let conflict = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH %@", "Delete action fixture.sync-conflict-")
+        ).firstMatch
+        guard conflict.waitForExistence(timeout: 15) else {
+            XCTFail("The distinct Delete conflict fixture did not appear.")
+            return
+        }
+        let deleteButtons = app.buttons.matching(NSPredicate(format: "label == %@", "Delete"))
+        guard deleteButtons.count == 1 else {
+            XCTFail("Expected one Delete action for the isolated conflict fixture.")
+            return
+        }
+        let delete = deleteButtons.firstMatch
+        guard delete.isHittable else {
+            XCTFail("The Delete action for the isolated conflict fixture was not hittable.")
+            return
+        }
+        delete.tap()
         XCTAssertTrue(app.staticTexts["No conflicts"].waitForExistence(timeout: 15))
     }
 

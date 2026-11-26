@@ -117,6 +117,7 @@ jobs:
             ${{ runner.temp }}/RooSync-Duo-iOS27.1-artifacts/*
             .build/e2e/**/*.log
             .build/e2e/**/*.xcresult
+            .build/e2e/**/*.mp4
             .build/e2e/**/DuoScreenshots/**
           include-hidden-files: true
           if-no-files-found: warn

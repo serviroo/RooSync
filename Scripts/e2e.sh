@@ -18,6 +18,7 @@ SIMULATOR_UDID="${SIMULATOR_UDID:-}"
 SIMULATOR_CREATED=0
 APP_INSTALLED=0
 TUNNEL_PID=""
+SIMULATOR_RECORDING_PID=""
 DOCKER=()
 
 mkdir -p "$E2E_DIR"
@@ -155,6 +156,7 @@ capture_failure_diagnostics() {
 	)
 	mkdir -p "$diagnostics"
 	print_xcresult_failure_diagnostics "$E2E_DIR/RooSync-E2E.xcresult" ui
+	print_xcresult_failure_diagnostics "$E2E_DIR/DeleteConflict-E2E.xcresult" delete-conflict
 	print_xcresult_failure_diagnostics "$E2E_DIR/PendingFolderIDCollision-E2E.xcresult" pending-collision
 	print_xcresult_failure_diagnostics "$E2E_DIR/FocusedSelfAddAndOffer-E2E.xcresult" focused-ui
 	print_xcresult_failure_diagnostics "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" duo-focused-ui
@@ -282,9 +284,18 @@ print()' <<<"$response" >>"$diagnostics/conflict-index-versions.log" 2>&1 || tru
 	fi
 }
 
+stop_simulator_recording() {
+	if [[ -n "$SIMULATOR_RECORDING_PID" ]]; then
+		kill -INT "$SIMULATOR_RECORDING_PID" >/dev/null 2>&1 || true
+		wait "$SIMULATOR_RECORDING_PID" >/dev/null 2>&1 || true
+		SIMULATOR_RECORDING_PID=""
+	fi
+}
+
 cleanup() {
 	local status=$?
 	trap - EXIT
+	stop_simulator_recording
 	if [[ "$status" -ne 0 ]]; then
 		capture_failure_diagnostics || true
 	fi
@@ -721,7 +732,18 @@ environment["ROOSYNC_DUO_SIMULATOR_VERIFIED"] = "1"
 with open(path, "wb") as destination:
     plistlib.dump(specification, destination)
 PY
-		xcodebuild -xctestrun "$xctestrun_file" \
+	duo_recording="$E2E_DIR/Duo-E2E-recording.mp4"
+	duo_recording_log="$E2E_DIR/duo-recording.log"
+	xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 "$duo_recording" >"$duo_recording_log" 2>&1 &
+	SIMULATOR_RECORDING_PID=$!
+	for _ in $(seq 1 3); do
+		if ! kill -0 "$SIMULATOR_RECORDING_PID" >/dev/null 2>&1; then
+			cat "$duo_recording_log" >&2
+			fail "Could not start the Duo simulator recording."
+		fi
+		sleep 1
+	done
+	xcodebuild -xctestrun "$xctestrun_file" \
 		-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
 		-parallel-testing-enabled NO \
 		-maximum-concurrent-test-simulator-destinations 1 \
@@ -733,6 +755,8 @@ PY
 		grep -nE 'error:|failed|Failure|TEST FAILED|signal kill' "$E2E_DIR/focused-ui-test.log" | tail -80 >&2 || true
 		fail "Focused Duo UI tests failed; see $E2E_DIR/focused-ui-test.log."
 	}
+	stop_simulator_recording
+	[[ -s "$duo_recording" ]] || fail "Duo UI tests passed but no simulator recording was retained."
 	python3 - "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" <<'PY' || fail "The Duo layout test did not report a passed result."
 import json
 import subprocess
@@ -961,6 +985,143 @@ for _ in $(seq 1 90); do
 done
 [[ -z "$APP_CONFLICT" && -z "$PEER_CONFLICT" ]] || fail "The conflict reappeared after the Docker peer resumed."
 
+DELETE_FIXTURE_NAME="Delete action fixture.md"
+DELETE_APP_CONTENT="Delete fixture edited on the iPhone peer"
+DELETE_PEER_CONTENT="Delete fixture edited on the Docker peer"
+printf 'Delete action fixture base content\n' > "$APP_FOLDER/$DELETE_FIXTURE_NAME"
+api_request "$APP_REST" "$APP_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
+wait_for_file "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" "Delete-action fixture on the Docker peer"
+cmp "$APP_FOLDER/$DELETE_FIXTURE_NAME" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME"
+DELETE_FILE_QUERY="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$DELETE_FIXTURE_NAME")"
+DELETE_BASE_APP_VERSION="null"
+DELETE_BASE_PEER_VERSION="null"
+for _ in $(seq 1 90); do
+	DELETE_BASE_APP_VERSION="$(local_file_version "$APP_REST" "$APP_API_KEY" "$DELETE_FILE_QUERY")"
+	DELETE_BASE_PEER_VERSION="$(local_file_version "$PEER_REST" "$PEER_API_KEY" "$DELETE_FILE_QUERY")"
+	if [[ "$DELETE_BASE_APP_VERSION" != null && "$DELETE_BASE_PEER_VERSION" != null && \
+		"$DELETE_BASE_APP_VERSION" == "$DELETE_BASE_PEER_VERSION" ]]; then
+		break
+	fi
+	sleep 1
+done
+[[ "$DELETE_BASE_APP_VERSION" != null && "$DELETE_BASE_PEER_VERSION" != null && \
+	"$DELETE_BASE_APP_VERSION" == "$DELETE_BASE_PEER_VERSION" ]] || \
+	fail "Both peers did not index the same Delete fixture baseline version."
+
+set_device_paused "$APP_REST" "$APP_API_KEY" "$PEER_ID" true
+set_device_paused "$PEER_REST" "$PEER_API_KEY" "$APP_ID" true
+wait_for_device_connection_state "$APP_REST" "$APP_API_KEY" "$PEER_ID" true
+wait_for_device_connection_state "$PEER_REST" "$PEER_API_KEY" "$APP_ID" true
+printf '%s\n' "$DELETE_APP_CONTENT" > "$APP_FOLDER/$DELETE_FIXTURE_NAME"
+printf '%s\n' "$DELETE_PEER_CONTENT" |
+	"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" -i "$CONTAINER_NAME" \
+		sh -c 'cat > "$1"' sh "/vault/$DELETE_FIXTURE_NAME"
+api_request "$APP_REST" "$APP_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
+api_request "$PEER_REST" "$PEER_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null
+DELETE_APP_VERSION="$DELETE_BASE_APP_VERSION"
+DELETE_PEER_VERSION="$DELETE_BASE_PEER_VERSION"
+for _ in $(seq 1 90); do
+	DELETE_APP_VERSION="$(local_file_version "$APP_REST" "$APP_API_KEY" "$DELETE_FILE_QUERY")"
+	DELETE_PEER_VERSION="$(local_file_version "$PEER_REST" "$PEER_API_KEY" "$DELETE_FILE_QUERY")"
+	if [[ "$DELETE_APP_VERSION" != "$DELETE_BASE_APP_VERSION" && "$DELETE_PEER_VERSION" != "$DELETE_BASE_PEER_VERSION" ]]; then
+		break
+	fi
+	sleep 1
+done
+[[ "$DELETE_APP_VERSION" != "$DELETE_BASE_APP_VERSION" && "$DELETE_PEER_VERSION" != "$DELETE_BASE_PEER_VERSION" ]] || \
+	fail "Both peers did not index the independent Delete fixture edits while disconnected."
+set_device_paused "$APP_REST" "$APP_API_KEY" "$PEER_ID" false
+set_device_paused "$PEER_REST" "$PEER_API_KEY" "$APP_ID" false
+wait_for_device_connection_state "$APP_REST" "$APP_API_KEY" "$PEER_ID" false
+wait_for_device_connection_state "$PEER_REST" "$PEER_API_KEY" "$APP_ID" false
+
+DELETE_CONFLICT_PATH=""
+for _ in $(seq 1 90); do
+	DELETE_CONFLICT_PATH="$(find "$APP_FOLDER" -maxdepth 1 -type f -name 'Delete action fixture.sync-conflict-*' -print -quit)"
+	if [[ -n "$DELETE_CONFLICT_PATH" && -f "$APP_FOLDER/$DELETE_FIXTURE_NAME" && -f "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" ]] && \
+		cmp -s "$APP_FOLDER/$DELETE_FIXTURE_NAME" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME"; then
+		break
+	fi
+	api_request "$APP_REST" "$APP_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null 2>&1 || true
+	api_request "$PEER_REST" "$PEER_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null 2>&1 || true
+	sleep 2
+done
+[[ -n "$DELETE_CONFLICT_PATH" ]] || fail "The real-core Delete fixture did not produce a conflict copy on the simulator."
+DELETE_CONFLICT_FILENAME="$(basename "$DELETE_CONFLICT_PATH")"
+wait_for_file "$DESKTOP_FOLDER/$DELETE_CONFLICT_FILENAME" "Delete-action conflict copy on the Docker peer"
+cmp "$APP_FOLDER/$DELETE_FIXTURE_NAME" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME"
+DELETE_ORIGINAL_SNAPSHOT="$E2E_DIR/Delete-action-original-before-delete.bin"
+cp "$APP_FOLDER/$DELETE_FIXTURE_NAME" "$DELETE_ORIGINAL_SNAPSHOT"
+cmp "$DELETE_ORIGINAL_SNAPSHOT" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" || fail "The Delete fixture original differs between peers before resolution."
+set_folder_paused "$PEER_REST" "$PEER_API_KEY" true
+
+xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+APP_INSTALLED=1
+xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
+	-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+	-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
+	-maximum-concurrent-test-simulator-destinations 1 \
+	CODE_SIGNING_ALLOWED=NO test-without-building \
+	-only-testing:RooSyncUITests/RooSyncUITests/testConflictCopyCanBeDeleted \
+	-resultBundlePath "$E2E_DIR/DeleteConflict-E2E.xcresult" >"$E2E_DIR/delete-conflict-test.log" 2>&1 || {
+	grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/delete-conflict-test.log" | tail -80 >&2 || true
+	fail "Real-core Delete conflict UI test failed; see $E2E_DIR/delete-conflict-test.log."
+}
+
+APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)"
+EXISTING_OFFER_PATH="$APP_DATA/Documents/Vaults/Existing E2E Offer"
+UNICODE_EXISTING_PATH="$APP_DATA/Documents/Vaults/$UNICODE_EXISTING_LABEL"
+APP_CONFIG="$APP_DATA/Library/Application Support/RooSync/config/config.xml"
+APP_API_KEY=""
+APP_FOLDER=""
+xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null
+for _ in $(seq 1 30); do
+	if [[ -f "$APP_CONFIG" ]]; then
+		APP_API_KEY="$(python3 - "$APP_CONFIG" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+node = ET.parse(sys.argv[1]).getroot().find("./gui/apikey")
+print(node.text if node is not None and node.text else "")
+PY
+)"
+		if [[ -n "$APP_API_KEY" ]] && curl --noproxy '*' --max-time 2 -fsS \
+			-H "X-API-Key: $APP_API_KEY" "$APP_REST/rest/system/status" >/dev/null 2>&1; then
+			APP_FOLDER="$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/config/folders | python3 -c 'import json,sys; folder_id=sys.argv[1]; folders=json.load(sys.stdin); folder=next((item for item in folders if item.get("id")==folder_id), None); print(folder.get("path", "") if folder else "")' "$APP_FOLDER_ID" || true)"
+			if [[ "$APP_FOLDER" == "$APP_DATA/Documents/Vaults/"* && -d "$APP_FOLDER" ]]; then break; fi
+		fi
+	fi
+	sleep 1
+done
+[[ "$APP_FOLDER" == "$APP_DATA/Documents/Vaults/"* && -d "$APP_FOLDER" ]] || \
+	fail "The simulator did not rebase its E2E vault after the Delete UI-test app container changed."
+[[ -f "$APP_FOLDER/$DELETE_FIXTURE_NAME" ]] || fail "The Delete action removed the original file on the simulator."
+cmp "$DELETE_ORIGINAL_SNAPSHOT" "$APP_FOLDER/$DELETE_FIXTURE_NAME" || fail "The simulator's original Delete fixture bytes changed during resolution."
+DELETE_APP_CONFLICT="$(find "$APP_FOLDER" -maxdepth 1 -type f -name 'Delete action fixture.sync-conflict-*' -print -quit)"
+[[ -z "$DELETE_APP_CONFLICT" ]] || fail "A Delete fixture conflict remained on the simulator."
+[[ -f "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" && -f "$DESKTOP_FOLDER/$DELETE_CONFLICT_FILENAME" ]] || \
+	fail "The Docker peer lost the original or conflict copy before Delete convergence."
+
+set_folder_paused "$PEER_REST" "$PEER_API_KEY" false
+for _ in $(seq 1 90); do
+	api_request "$APP_REST" "$APP_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null 2>&1 || true
+	api_request "$PEER_REST" "$PEER_API_KEY" POST "/rest/db/scan?folder=$APP_FOLDER_ID" >/dev/null 2>&1 || true
+	DELETE_APP_CONFLICT="$(find "$APP_FOLDER" -maxdepth 1 -type f -name 'Delete action fixture.sync-conflict-*' -print -quit)"
+	DELETE_PEER_CONFLICT="$(find "$DESKTOP_FOLDER" -maxdepth 1 -type f -name 'Delete action fixture.sync-conflict-*' -print -quit)"
+	if [[ -z "$DELETE_APP_CONFLICT" && -z "$DELETE_PEER_CONFLICT" ]] && \
+		[[ -f "$APP_FOLDER/$DELETE_FIXTURE_NAME" && -f "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" ]] && \
+		cmp -s "$DELETE_ORIGINAL_SNAPSHOT" "$APP_FOLDER/$DELETE_FIXTURE_NAME" && \
+		cmp -s "$DELETE_ORIGINAL_SNAPSHOT" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME"; then
+		break
+	fi
+	sleep 1
+done
+DELETE_APP_CONFLICT="$(find "$APP_FOLDER" -maxdepth 1 -type f -name 'Delete action fixture.sync-conflict-*' -print -quit)"
+DELETE_PEER_CONFLICT="$(find "$DESKTOP_FOLDER" -maxdepth 1 -type f -name 'Delete action fixture.sync-conflict-*' -print -quit)"
+[[ -z "$DELETE_APP_CONFLICT" && -z "$DELETE_PEER_CONFLICT" ]] || fail "A Delete fixture conflict reappeared on one or both peers."
+cmp "$DELETE_ORIGINAL_SNAPSHOT" "$APP_FOLDER/$DELETE_FIXTURE_NAME" || fail "Delete did not preserve the original fixture bytes on the simulator."
+cmp "$DELETE_ORIGINAL_SNAPSHOT" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" || fail "Delete did not preserve the original fixture bytes on the Docker peer."
+
 run_pending_folder_collision_test
 
 printf '%s\n' \
@@ -976,4 +1137,5 @@ printf '%s\n' \
 	'PASS: app Keep copy preserved the conflict and removed its conflict suffix.' \
 	'PASS: timestamp-only legacy conflicts kept their original extension behavior.' \
 	'PASS: extensionless Syncthing conflicts were kept without retaining the conflict suffix.' \
-	'PASS: kept copy synced to Docker and removed the conflict on both peers.'
+	'PASS: kept copy synced to Docker and removed the conflict on both peers.' \
+	'PASS: app Delete copy removed a distinct real-core conflict while preserving the original on both peers.'

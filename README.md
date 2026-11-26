@@ -47,7 +47,8 @@ for the full native iPhone Duo presentation. A focused hosted iPhone Duo
 simulator smoke test is configured for that exact Xcode, SDK, runtime, and device
 profile. It checks the starting pose's device ID and QR visibility, toolbar
 actions, add-device/add-folder forms, folder navigation, and logs export, and
-stores successful screenshots in the E2E result artifact. After the UI checks
+stores successful screenshots, a simulator recording, and the full share-sheet
+accessibility hierarchy in the E2E artifacts. After the UI checks
 pass, the job also packages a separate unsigned arm64 Release artifact built
 with Xcode 27.1 and the iOS 27.1 SDK. Check the [latest hosted Duo workflow
 run](https://github.com/serviroo/RooSync/actions/workflows/ios.yml) for its
@@ -172,7 +173,9 @@ uses Lima SSH forwarding for the Docker peer. The GitHub Actions `macos-15`
 Apple Silicon runner also uses QEMU rather than Apple's nested virtualization.
 The script pairs the simulator app's embedded core with a Docker Syncthing peer,
 checks a sample vault in both directions, creates a concurrent-edit conflict,
-and exercises **Keep copy** in the app's UI test. It does not produce screenshots.
+and exercises **Keep copy** and **Delete** in the app's UI tests. Screenshot and
+accessibility evidence is stored in the XCUITest result bundle; the script does
+not emit a separate screenshot directory.
 
 Local validation on 2026-11-24 used Xcode 26.6, an iOS 27.0 simulator, and the
 Syncthing 2.1.7 Docker peer. `./Scripts/e2e.sh` completed with ten UI tests
