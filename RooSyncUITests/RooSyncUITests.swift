@@ -170,23 +170,32 @@ final class RooSyncUITests: XCTestCase {
         folderList: XCUIElement,
         pairedDevice: XCUIElement
     ) {
-        let state = """
-        pairedDeviceExists=\(pairedDevice.exists)
-        pairedDeviceFrame=\(pairedDevice.frame)
-        pairedDeviceHittable=\(pairedDevice.isHittable)
-        folderListFrame=\(folderList.frame)
-        """
-        let stateAttachment = XCTAttachment(string: state)
-        stateAttachment.name = "Docker peer row failure state"
-        stateAttachment.lifetime = .keepAlways
-        add(stateAttachment)
-
         let hierarchy = XCTAttachment(string: app.debugDescription)
         hierarchy.name = "Docker peer row failure accessibility hierarchy"
         hierarchy.lifetime = .keepAlways
         add(hierarchy)
-
         attachScreenshot(named: "Docker peer row failure")
+
+        let state: String
+        if pairedDevice.exists {
+            state = """
+            pairedDeviceExists=true
+            pairedDeviceFrame=\(pairedDevice.frame)
+            pairedDeviceHittable=\(pairedDevice.isHittable)
+            folderListFrame=\(folderList.frame)
+            """
+        } else {
+            state = """
+            pairedDeviceExists=false
+            pairedDeviceFrame=unavailable
+            pairedDeviceHittable=unavailable
+            folderListFrame=\(folderList.frame)
+            """
+        }
+        let stateAttachment = XCTAttachment(string: state)
+        stateAttachment.name = "Docker peer row failure state"
+        stateAttachment.lifetime = .keepAlways
+        add(stateAttachment)
     }
 
     @MainActor
@@ -278,24 +287,28 @@ final class RooSyncUITests: XCTestCase {
             guard XCTWaiter.wait(for: [hittable], timeout: 1) == .completed else { continue }
 
             let peerFrame = pairedDevice.frame
-            guard folderList.frame.contains(peerFrame), pairedDevice.isHittable else { continue }
-            let peerTap = pairedDevice.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            guard pairedDevice.frame == peerFrame,
+            let appFrame = app.frame
+            guard appFrame.width > 0,
+                  appFrame.height > 0,
+                  appFrame.contains(peerFrame),
                   folderList.frame.contains(peerFrame),
                   pairedDevice.isHittable else { continue }
-
+            let peerTapOffset = CGVector(
+                dx: (peerFrame.midX - appFrame.minX) / appFrame.width,
+                dy: (peerFrame.midY - appFrame.minY) / appFrame.height
+            )
+            let peerTap = app.coordinate(withNormalizedOffset: peerTapOffset)
             let tapExists = pairedDevice.exists
+            guard tapExists else { continue }
             let tapIsHittable = pairedDevice.isHittable
             let tapFrame = pairedDevice.frame
             let tapFrameIsVisible = folderList.frame.contains(tapFrame)
-            guard tapExists,
-                  tapFrame == peerFrame,
+            let tapAppFrame = app.frame
+            guard tapFrame == peerFrame,
                   tapFrameIsVisible,
+                  tapAppFrame == appFrame,
+                  tapAppFrame.contains(tapFrame),
                   tapIsHittable else { continue }
-
-            XCTAssertTrue(tapExists)
-            XCTAssertTrue(tapFrameIsVisible)
-            XCTAssertTrue(tapIsHittable)
             peerTap.tap()
             pairedDeviceTapped = true
             break
