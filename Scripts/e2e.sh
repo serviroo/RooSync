@@ -734,7 +734,7 @@ with open(path, "wb") as destination:
 PY
 	duo_recording="$E2E_DIR/Duo-E2E-recording.mp4"
 	duo_recording_log="$E2E_DIR/duo-recording.log"
-	xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 "$duo_recording" >"$duo_recording_log" 2>&1 &
+	xcrun simctl io "$SIMULATOR_UDID" recordVideo --codec=h264 --display=primary "$duo_recording" >"$duo_recording_log" 2>&1 &
 	SIMULATOR_RECORDING_PID=$!
 	for _ in $(seq 1 3); do
 		if ! kill -0 "$SIMULATOR_RECORDING_PID" >/dev/null 2>&1; then
