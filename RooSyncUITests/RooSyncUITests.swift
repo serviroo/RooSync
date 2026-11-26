@@ -165,6 +165,31 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    private func attachPairedDeviceFailureDiagnostics(
+        in app: XCUIApplication,
+        folderList: XCUIElement,
+        pairedDevice: XCUIElement
+    ) {
+        let state = """
+        pairedDeviceExists=\(pairedDevice.exists)
+        pairedDeviceFrame=\(pairedDevice.frame)
+        pairedDeviceHittable=\(pairedDevice.isHittable)
+        folderListFrame=\(folderList.frame)
+        """
+        let stateAttachment = XCTAttachment(string: state)
+        stateAttachment.name = "Docker peer row failure state"
+        stateAttachment.lifetime = .keepAlways
+        add(stateAttachment)
+
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Docker peer row failure accessibility hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+
+        attachScreenshot(named: "Docker peer row failure")
+    }
+
+    @MainActor
     func testEmbeddedRESTRejectsRequestsWithoutAPIKey() async throws {
         let app = XCUIApplication()
         app.launch()
@@ -239,19 +264,47 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let foldersTab = app.buttons["Folders"]
         XCTAssertTrue(foldersTab.waitForExistence(timeout: 15))
-        let pairedDevice = app.descendants(matching: .any)["paired-device-name-Docker Syncthing E2E"]
+        let pairedDevice = app.descendants(matching: .any)
+            .matching(identifier: "paired-device-name-Docker Syncthing E2E")
+            .firstMatch
+        var pairedDeviceTapped = false
         for _ in 0..<30 {
             folderList.swipeUp()
-            if pairedDevice.waitForExistence(timeout: 1),
-               folderList.frame.contains(pairedDevice.frame),
-               pairedDevice.isHittable {
-                break
-            }
+            guard pairedDevice.waitForExistence(timeout: 1) else { continue }
+            let hittable = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isHittable == true"),
+                object: pairedDevice
+            )
+            guard XCTWaiter.wait(for: [hittable], timeout: 1) == .completed else { continue }
+
+            let peerFrame = pairedDevice.frame
+            guard folderList.frame.contains(peerFrame), pairedDevice.isHittable else { continue }
+            let peerTap = pairedDevice.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            guard pairedDevice.frame == peerFrame,
+                  folderList.frame.contains(peerFrame),
+                  pairedDevice.isHittable else { continue }
+
+            let tapExists = pairedDevice.exists
+            let tapIsHittable = pairedDevice.isHittable
+            let tapFrame = pairedDevice.frame
+            let tapFrameIsVisible = folderList.frame.contains(tapFrame)
+            guard tapExists,
+                  tapFrame == peerFrame,
+                  tapFrameIsVisible,
+                  tapIsHittable else { continue }
+
+            XCTAssertTrue(tapExists)
+            XCTAssertTrue(tapFrameIsVisible)
+            XCTAssertTrue(tapIsHittable)
+            peerTap.tap()
+            pairedDeviceTapped = true
+            break
         }
-        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15), "The Docker Syncthing device did not appear after scrolling the folder list.")
-        XCTAssertTrue(folderList.frame.contains(pairedDevice.frame))
-        XCTAssertTrue(pairedDevice.isHittable)
-        pairedDevice.tap()
+        guard pairedDeviceTapped else {
+            attachPairedDeviceFailureDiagnostics(in: app, folderList: folderList, pairedDevice: pairedDevice)
+            XCTFail("The Docker Syncthing device did not remain visible and hittable after scrolling the folder list.")
+            return
+        }
         XCTAssertFalse(
             app.staticTexts["Folder unavailable"].waitForExistence(timeout: 2),
             "Tapping a paired device must not select a folder detail."
