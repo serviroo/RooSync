@@ -136,7 +136,7 @@ final class SyncthingAPI {
     func addFolder(id: String, name: String, path: String, sharedWith: [String] = []) async throws {
         var value = try await json("/rest/config/defaults/folder") as? [String: Any] ?? [:]
         value["id"] = id
-        value["label"] = nonBlank(name, or: "")
+        value["label"] = name
         value["path"] = path
         value["devices"] = sharedWith.map { ["deviceID": $0] }
         try await send("/rest/config/folders", method: "POST", json: value)

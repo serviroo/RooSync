@@ -1196,11 +1196,11 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 kill "$NAME_PEERS_PID" >/dev/null 2>&1 || true
 ACCEPTED_UNNAMED_NAME="$(cat "$E2E_DIR/accepted-unnamed-device-name.json" 2>/dev/null || true)"
 [[ "$ACCEPTED_UNNAMED_NAME" == '""' ]] || fail "Accepting the unnamed pending device saved the name ${ACCEPTED_UNNAMED_NAME:-nothing} instead of an empty name."
-python3 -c 'import sys,xml.etree.ElementTree as ET; labels={f.get("id"): f.get("label") for f in ET.parse(sys.argv[1]).getroot().findall("./folder")}; raise SystemExit(any(labels.get(i) != "" for i in sys.argv[2:]))' \
+python3 -c 'import sys,xml.etree.ElementTree as ET; labels={f.get("id"): f.get("label") for f in ET.parse(sys.argv[1]).getroot().findall("./folder")}; raise SystemExit(any(labels.get(i) != i for i in sys.argv[2:]))' \
 	"$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)/Library/Application Support/RooSync/config/config.xml" \
 	roosync-e2e-unlabeled-offer roosync-e2e-blank-label-offer ||
-	fail "Accepted folder offers without a label were not saved with an empty label."
-printf '%s\n' 'PASS: unnamed devices and unlabeled folders were saved with an empty name.'
+	fail "Accepted folder offers without a label were not saved with their folder ID as the label."
+printf '%s\n' 'PASS: unnamed devices were saved with an empty name and unlabeled folders with their folder ID.'
 
 APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)"
 EXISTING_OFFER_PATH="$APP_DATA/Documents/Vaults/Existing E2E Offer"
