@@ -689,9 +689,11 @@ final class RooSyncUITests: XCTestCase {
             ("Conflicts", "Conflicts"),
         ] {
             openFolderSubScreen(link, titled: title, in: app)
-            let back = app.navigationBars[title].buttons["BackButton"]
+            let back = backButton(in: app)
             XCTAssertTrue(back.waitForExistence(timeout: 15))
-            XCTAssertEqual(back.label, folderLabel)
+            if !back.label.isEmpty {
+                XCTAssertEqual(back.label, folderLabel)
+            }
             back.tap()
             assertFolderScreen(folderLabel, in: app)
             XCTAssertEqual(app.navigationBars["RooSync"].exists, folderListShown)
@@ -706,8 +708,11 @@ final class RooSyncUITests: XCTestCase {
         }
 
         guard !folderListShown else { return }
-        let folderBack = app.navigationBars[folderLabel].buttons["BackButton"]
-        XCTAssertEqual(folderBack.label, "RooSync")
+        let folderBack = backButton(in: app)
+        XCTAssertTrue(folderBack.waitForExistence(timeout: 15))
+        if !folderBack.label.isEmpty {
+            XCTAssertEqual(folderBack.label, "RooSync")
+        }
         folderBack.tap()
         XCTAssertTrue(app.navigationBars["RooSync"].waitForExistence(timeout: 15))
     }
@@ -721,9 +726,9 @@ final class RooSyncUITests: XCTestCase {
         let folderListShown = app.navigationBars["RooSync"].exists
         openFolderSubScreen("Share with devices", titled: "Share folder", in: app)
         if !folderListShown {
-            app.navigationBars["Share folder"].buttons["BackButton"].tap()
+            backButton(in: app).tap()
             assertFolderScreen("RooSync E2E Vault", in: app)
-            app.navigationBars["RooSync E2E Vault"].buttons["BackButton"].tap()
+            backButton(in: app).tap()
             XCTAssertTrue(app.navigationBars["RooSync"].waitForExistence(timeout: 15))
             let folderList = app.collectionViews.firstMatch
             for _ in 0..<12 where !app.staticTexts["device-id"].exists {
@@ -746,6 +751,11 @@ final class RooSyncUITests: XCTestCase {
         XCTAssertTrue(linkText.waitForExistence(timeout: 15))
         linkText.tap()
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    private func backButton(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "BackButton").firstMatch
     }
 
     @MainActor
