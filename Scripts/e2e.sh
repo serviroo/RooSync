@@ -754,6 +754,8 @@ PY
 		-only-testing:RooSyncUITests/RooSyncUITests/testCannotAddLocalDeviceID \
 		-only-testing:RooSyncUITests/RooSyncUITests/testAcceptingOfferForExistingFolderSharesWithoutReplacingIt \
 		-only-testing:RooSyncUITests/RooSyncUITests/testDuoAdaptiveLayoutAndFormsInStartingPose \
+		-only-testing:RooSyncUITests/RooSyncUITests/testFolderSubScreensReturnToFolder \
+		-only-testing:RooSyncUITests/RooSyncUITests/testChoosingAnotherFolderShowsItsOwnScreen \
 		-resultBundlePath "$E2E_DIR/FocusedDuoLayout-E2E.xcresult" >"$E2E_DIR/focused-ui-test.log" 2>&1 || {
 		grep -nE 'error:|failed|Failure|TEST FAILED|signal kill' "$E2E_DIR/focused-ui-test.log" | tail -80 >&2 || true
 		fail "Focused Duo UI tests failed; see $E2E_DIR/focused-ui-test.log."
@@ -911,6 +913,8 @@ xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-only-testing:RooSyncUITests/RooSyncUITests/testConflictCopyCanBeKept \
 	-only-testing:RooSyncUITests/RooSyncUITests/testLogsExportRendersCopyActionOnOrdinarySimulator \
 	-only-testing:RooSyncUITests/RooSyncUITests/testFolderStatusHandlesPlusInFolderID \
+	-only-testing:RooSyncUITests/RooSyncUITests/testFolderSubScreensReturnToFolder \
+	-only-testing:RooSyncUITests/RooSyncUITests/testChoosingAnotherFolderShowsItsOwnScreen \
 	-resultBundlePath "$E2E_DIR/RooSync-E2E.xcresult" >"$E2E_DIR/test.log" 2>&1 || {
 	grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/test.log" | tail -80 >&2 || true
 	fail "Simulator UI E2E failed; see $E2E_DIR/test.log."

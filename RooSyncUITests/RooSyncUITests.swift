@@ -675,6 +675,96 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testFolderSubScreensReturnToFolder() {
+        let app = XCUIApplication()
+        app.launch()
+        openE2EFolder(in: app)
+        let folderLabel = "RooSync E2E Vault"
+        assertFolderScreen(folderLabel, in: app)
+        let folderListShown = app.navigationBars["RooSync"].exists
+
+        for (link, title) in [
+            ("Share with devices", "Share folder"),
+            ("Ignore patterns", "Ignore patterns"),
+            ("Conflicts", "Conflicts"),
+        ] {
+            openFolderSubScreen(link, titled: title, in: app)
+            let back = backButton(in: app)
+            XCTAssertTrue(back.waitForExistence(timeout: 15))
+            if !back.label.isEmpty {
+                XCTAssertEqual(back.label, folderLabel)
+            }
+            back.tap()
+            assertFolderScreen(folderLabel, in: app)
+            XCTAssertEqual(app.navigationBars["RooSync"].exists, folderListShown)
+
+            guard !folderListShown else { continue }
+            openFolderSubScreen(link, titled: title, in: app)
+            let window = app.windows.firstMatch
+            window.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5))
+                .withOffset(CGVector(dx: 1, dy: 0))
+                .press(forDuration: 0.1, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+            assertFolderScreen(folderLabel, in: app)
+        }
+
+        guard !folderListShown else { return }
+        let folderBack = backButton(in: app)
+        XCTAssertTrue(folderBack.waitForExistence(timeout: 15))
+        if !folderBack.label.isEmpty {
+            XCTAssertEqual(folderBack.label, "RooSync")
+        }
+        folderBack.tap()
+        XCTAssertTrue(app.navigationBars["RooSync"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    func testChoosingAnotherFolderShowsItsOwnScreen() {
+        let app = XCUIApplication()
+        app.launch()
+        openE2EFolder(in: app)
+        assertFolderScreen("RooSync E2E Vault", in: app)
+        let folderListShown = app.navigationBars["RooSync"].exists
+        openFolderSubScreen("Share with devices", titled: "Share folder", in: app)
+        if !folderListShown {
+            backButton(in: app).tap()
+            assertFolderScreen("RooSync E2E Vault", in: app)
+            backButton(in: app).tap()
+            XCTAssertTrue(app.navigationBars["RooSync"].waitForExistence(timeout: 15))
+            let folderList = app.collectionViews.firstMatch
+            for _ in 0..<12 where !app.staticTexts["device-id"].exists {
+                folderList.swipeDown()
+            }
+        }
+
+        openFolder("notes+work", in: app)
+        assertFolderScreen("Plus ID E2E Folder", in: app)
+        XCTAssertFalse(app.navigationBars["Share folder"].exists)
+    }
+
+    @MainActor
+    private func openFolderSubScreen(_ link: String, titled title: String, in app: XCUIApplication) {
+        let linkText = app.staticTexts[link]
+        let folderDetails = app.collectionViews.firstMatch
+        for _ in 0..<8 where !(linkText.exists && linkText.isHittable) {
+            folderDetails.swipeUp()
+        }
+        XCTAssertTrue(linkText.waitForExistence(timeout: 15))
+        linkText.tap()
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    private func backButton(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "BackButton").firstMatch
+    }
+
+    @MainActor
+    private func assertFolderScreen(_ label: String, in app: XCUIApplication) {
+        XCTAssertTrue(app.navigationBars[label].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Rescan now"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
     private func tapAddMenu(in app: XCUIApplication) {
         let addMenu = app.buttons["Add"]
         XCTAssertTrue(addMenu.waitForExistence(timeout: 30))
@@ -741,10 +831,15 @@ final class RooSyncUITests: XCTestCase {
     @MainActor
     private func openE2EFolder(in app: XCUIApplication) {
         XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        openFolder("roosync-e2e-vault", in: app)
+    }
+
+    @MainActor
+    private func openFolder(_ folderID: String, in app: XCUIApplication) {
         let folderList = app.collectionViews.firstMatch
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let folder = app.descendants(matching: .any)
-            .matching(identifier: "folder-row-roosync-e2e-vault")
+            .matching(identifier: "folder-row-\(folderID)")
             .firstMatch
         for _ in 0..<12 {
             if folder.exists {

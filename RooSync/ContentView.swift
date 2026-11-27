@@ -143,16 +143,18 @@ private struct FolderListView: View {
                 }
             }
         } detail: {
-            if let selectedFolder {
-                FolderDetailView(folderID: selectedFolder.folderID)
-                    .id(selectedFolder)
-            } else {
-                ContentUnavailableView(
-                    "Select a folder",
-                    systemImage: "folder",
-                    description: Text("Choose a folder to view its status and settings.")
-                )
+            NavigationStack {
+                if let selectedFolder {
+                    FolderDetailView(folderID: selectedFolder.folderID)
+                } else {
+                    ContentUnavailableView(
+                        "Select a folder",
+                        systemImage: "folder",
+                        description: Text("Choose a folder to view its status and settings.")
+                    )
+                }
             }
+            .id(selectedFolder)
         }
         .sheet(isPresented: $showingAddDevice) { AddDeviceView() }
         .sheet(isPresented: $showingAddFolder) { AddFolderView() }
