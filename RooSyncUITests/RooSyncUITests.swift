@@ -421,25 +421,37 @@ final class RooSyncUITests: XCTestCase {
         let unlabeledOffer = pendingFolderRow("roosync-e2e-unlabeled-offer", in: app)
         XCTAssertTrue(unlabeledOffer.staticTexts["roosync-e2e-unlabeled-offer"].waitForExistence(timeout: 15))
 
-        let accept = app.buttons["accept-folder-roosync-e2e-unlabeled-offer"]
-        accept.tap()
-        XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
-        let folderRow = visibleFolderRow("roosync-e2e-unlabeled-offer", in: app)
-        XCTAssertTrue(folderRow.staticTexts["roosync-e2e-unlabeled-offer"].waitForExistence(timeout: 15))
+        for folderID in ["roosync-e2e-unlabeled-offer", "roosync-e2e-blank-label-offer"] {
+            let accept = app.buttons["accept-folder-\(folderID)"]
+            accept.tap()
+            XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
+            let folderRow = visibleFolderRow(folderID, in: app)
+            XCTAssertTrue(folderRow.staticTexts[folderID].waitForExistence(timeout: 15))
+        }
         attachScreenshot(named: "Accepted unlabeled share")
     }
 
     @MainActor
-    func testUnnamedPendingDeviceShowsIDPrefix() {
+    func testUnnamedPendingDeviceShowsIDPrefixAndLearnsItsNameAfterAccept() {
         guard let peerID = ProcessInfo.processInfo.environment["ROOSYNC_E2E_UNNAMED_PEER_ID"] else {
             XCTFail("The unnamed Docker peer was not provided.")
             return
         }
+        let prefix = String(peerID.prefix(7))
         let app = XCUIApplication()
         app.launch()
         let pendingDevice = app.cells.containing(NSPredicate(format: "label == %@", peerID)).firstMatch
         XCTAssertTrue(pendingDevice.waitForExistence(timeout: 60))
-        XCTAssertTrue(pendingDevice.staticTexts[String(peerID.prefix(7))].waitForExistence(timeout: 15))
+        XCTAssertTrue(pendingDevice.staticTexts[prefix].waitForExistence(timeout: 15))
+        pendingDevice.buttons["Accept"].tap()
+        XCTAssertTrue(pendingDevice.waitForNonExistence(timeout: 30))
+        assertPairedDeviceVisible(prefix, in: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        shareUnnamedFolder(withDevicesLabeled: [prefix], in: app)
+        XCTAssertTrue(app.switches["Renamed E2E Peer"].waitForExistence(timeout: 120))
     }
 
     @MainActor
@@ -468,35 +480,30 @@ final class RooSyncUITests: XCTestCase {
             XCTFail("The announcing Docker peer was not provided.")
             return
         }
+        guard let spacedPeerID = ProcessInfo.processInfo.environment["ROOSYNC_E2E_SPACED_PEER_ID"] else {
+            XCTFail("The Docker peer for the spaces-only name was not provided.")
+            return
+        }
         let prefix = String(peerID.prefix(7))
+        let spacedPrefix = String(spacedPeerID.prefix(7))
         let app = XCUIApplication()
         app.launch()
-        tapAddMenu(in: app)
-        app.buttons["Add device"].tap()
-        let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
-        XCTAssertTrue(idField.waitForExistence(timeout: 15))
-        idField.tap()
-        idField.typeText(peerID)
-        let addButton = app.buttons["add-device-confirmation"]
-        addButton.tap()
-        XCTAssertTrue(addButton.waitForNonExistence(timeout: 30))
+        addDeviceThroughForm(id: peerID, name: "", in: app)
         assertPairedDeviceVisible(prefix, in: app)
+        addDeviceThroughForm(id: spacedPeerID, name: "   ", in: app)
+        assertPairedDeviceVisible(spacedPrefix, in: app)
 
         app.terminate()
         app.launch()
         XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
-        visibleFolderRow("roosync-e2e-unnamed-folder", in: app).tap()
-        app.staticTexts["Share with devices"].tap()
-        let unnamedToggle = app.switches[prefix]
-        XCTAssertTrue(unnamedToggle.waitForExistence(timeout: 15))
-        unnamedToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        let shared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: unnamedToggle)
-        XCTAssertEqual(XCTWaiter.wait(for: [shared], timeout: 15), .completed)
+        shareUnnamedFolder(withDevicesLabeled: [prefix, spacedPrefix], in: app)
         XCTAssertTrue(app.switches["Announced E2E Peer"].waitForExistence(timeout: 120))
+        XCTAssertTrue(app.switches["Spaced Name E2E Peer"].waitForExistence(timeout: 120))
 
         app.terminate()
         app.launch()
         assertPairedDeviceVisible("Announced E2E Peer", in: app)
+        assertPairedDeviceVisible("Spaced Name E2E Peer", in: app)
     }
 
     @MainActor
@@ -930,6 +937,38 @@ final class RooSyncUITests: XCTestCase {
     private func openE2EFolder(in app: XCUIApplication) {
         XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
         openFolder("roosync-e2e-vault", in: app)
+    }
+
+    @MainActor
+    private func addDeviceThroughForm(id: String, name: String, in app: XCUIApplication) {
+        tapAddMenu(in: app)
+        app.buttons["Add device"].tap()
+        let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
+        XCTAssertTrue(idField.waitForExistence(timeout: 15))
+        idField.tap()
+        idField.typeText(id)
+        if !name.isEmpty {
+            let nameField = app.textFields["Name"]
+            nameField.tap()
+            nameField.typeText(name)
+            XCTAssertEqual(nameField.value as? String, name)
+        }
+        let addButton = app.buttons["add-device-confirmation"]
+        addButton.tap()
+        XCTAssertTrue(addButton.waitForNonExistence(timeout: 30))
+    }
+
+    @MainActor
+    private func shareUnnamedFolder(withDevicesLabeled labels: [String], in app: XCUIApplication) {
+        visibleFolderRow("roosync-e2e-unnamed-folder", in: app).tap()
+        app.staticTexts["Share with devices"].tap()
+        for label in labels {
+            let toggle = app.switches[label]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            let shared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
+            XCTAssertEqual(XCTWaiter.wait(for: [shared], timeout: 15), .completed)
+        }
     }
 
     @MainActor

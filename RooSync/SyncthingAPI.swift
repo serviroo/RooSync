@@ -119,7 +119,7 @@ final class SyncthingAPI {
     func addDevice(id: String, name: String, address: String? = nil, allowedNetworks: [String]? = nil) async throws {
         var value = try await json("/rest/config/defaults/device") as? [String: Any] ?? [:]
         value["deviceID"] = id.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        value["name"] = name
+        value["name"] = nonBlank(name, or: "")
         if let address, !address.isEmpty { value["addresses"] = [address] }
         if let allowedNetworks { value["allowedNetworks"] = allowedNetworks }
         try await send("/rest/config/devices", method: "POST", json: value)
@@ -136,7 +136,7 @@ final class SyncthingAPI {
     func addFolder(id: String, name: String, path: String, sharedWith: [String] = []) async throws {
         var value = try await json("/rest/config/defaults/folder") as? [String: Any] ?? [:]
         value["id"] = id
-        value["label"] = name
+        value["label"] = nonBlank(name, or: "")
         value["path"] = path
         value["devices"] = sharedWith.map { ["deviceID": $0] }
         try await send("/rest/config/folders", method: "POST", json: value)

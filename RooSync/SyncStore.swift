@@ -737,8 +737,7 @@ final class SyncStore: ObservableObject {
         let label: String
         var component: String
         if incomingLabel {
-            let remoteLabel = name.trimmingCharacters(in: .whitespacesAndNewlines)
-            label = remoteLabel.isEmpty ? folderID : remoteLabel
+            label = name.trimmingCharacters(in: .whitespacesAndNewlines)
             component = safeFolderComponent(label, fallbackID: folderID)
         } else {
             label = try normalizedFolderName(name)
