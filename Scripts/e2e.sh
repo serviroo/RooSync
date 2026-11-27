@@ -1143,6 +1143,7 @@ unnamed_folder_shared_with() {
 (
 	announced_paired=false
 	spaced_paired=false
+	unnamed_recorded=false
 	unnamed_renamed=false
 	until [[ "$announced_paired" == true && "$spaced_paired" == true && "$unnamed_renamed" == true ]]; do
 		app_config="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data 2>/dev/null)/Library/Application Support/RooSync/config/config.xml"
@@ -1155,9 +1156,12 @@ unnamed_folder_shared_with() {
 			add_device "http://127.0.0.1:$SPACED_PEER_REST_PORT" "$SPACED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
 			spaced_paired=true
 		fi
-		if [[ "$unnamed_renamed" == false ]] && accepted_name="$(api_request "$APP_REST" "$app_api_key" GET "/rest/config/devices/$UNNAMED_PEER_ID" 2>/dev/null |
+		if [[ "$unnamed_recorded" == false ]] && accepted_name="$(api_request "$APP_REST" "$app_api_key" GET "/rest/config/devices/$UNNAMED_PEER_ID" 2>/dev/null |
 			python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["name"]))' 2>/dev/null)"; then
 			printf '%s\n' "$accepted_name" >"$E2E_DIR/accepted-unnamed-device-name.json"
+			unnamed_recorded=true
+		fi
+		if [[ "$unnamed_recorded" == true && "$unnamed_renamed" == false ]] && unnamed_folder_shared_with "$app_api_key" "$UNNAMED_PEER_ID"; then
 			if [[ "$accepted_name" == '""' ]]; then
 				api_request "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" PATCH "/rest/config/devices/$UNNAMED_PEER_ID" '{"name":"Renamed E2E Peer"}' >/dev/null
 				set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true

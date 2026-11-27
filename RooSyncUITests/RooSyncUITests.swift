@@ -450,7 +450,7 @@ final class RooSyncUITests: XCTestCase {
         app.terminate()
         app.launch()
         XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
-        shareUnnamedFolder(withDevicesLabeled: [prefix], in: app)
+        shareUnnamedFolder(withUnnamedDevices: [peerID], in: app)
         XCTAssertTrue(app.switches["Renamed E2E Peer"].waitForExistence(timeout: 120))
     }
 
@@ -496,7 +496,7 @@ final class RooSyncUITests: XCTestCase {
         app.terminate()
         app.launch()
         XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
-        shareUnnamedFolder(withDevicesLabeled: [prefix, spacedPrefix], in: app)
+        shareUnnamedFolder(withUnnamedDevices: [peerID, spacedPeerID], in: app)
         XCTAssertTrue(app.switches["Announced E2E Peer"].waitForExistence(timeout: 120))
         XCTAssertTrue(app.switches["Spaced Name E2E Peer"].waitForExistence(timeout: 120))
 
@@ -959,14 +959,17 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func shareUnnamedFolder(withDevicesLabeled labels: [String], in app: XCUIApplication) {
+    private func shareUnnamedFolder(withUnnamedDevices deviceIDs: [String], in app: XCUIApplication) {
         visibleFolderRow("roosync-e2e-unnamed-folder", in: app).tap()
         app.staticTexts["Share with devices"].tap()
-        for label in labels {
-            let toggle = app.switches[label]
+        for deviceID in deviceIDs {
+            let toggle = app.switches[String(deviceID.prefix(7))]
             XCTAssertTrue(toggle.waitForExistence(timeout: 15))
             toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-            let shared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: toggle)
+            let shared = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", "1"),
+                object: app.switches["share-device-\(deviceID)"]
+            )
             XCTAssertEqual(XCTWaiter.wait(for: [shared], timeout: 15), .completed)
         }
     }

@@ -577,6 +577,7 @@ private struct FolderSharingView: View {
                         Task { await store.setSharing(folder, deviceID: device.deviceID, shared: shared) }
                     }
                 ))
+                .accessibilityIdentifier("share-device-\(device.deviceID)")
             }
         }
         .navigationTitle("Share folder")
