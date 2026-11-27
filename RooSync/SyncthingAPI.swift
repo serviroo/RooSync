@@ -119,7 +119,7 @@ final class SyncthingAPI {
     func addDevice(id: String, name: String, address: String? = nil, allowedNetworks: [String]? = nil) async throws {
         var value = try await json("/rest/config/defaults/device") as? [String: Any] ?? [:]
         value["deviceID"] = id.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        value["name"] = name.isEmpty ? "Syncthing device" : name
+        value["name"] = name
         if let address, !address.isEmpty { value["addresses"] = [address] }
         if let allowedNetworks { value["allowedNetworks"] = allowedNetworks }
         try await send("/rest/config/devices", method: "POST", json: value)

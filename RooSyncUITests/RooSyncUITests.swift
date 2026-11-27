@@ -459,13 +459,44 @@ final class RooSyncUITests: XCTestCase {
     func testUnnamedPairedDeviceShowsIDPrefix() {
         let app = XCUIApplication()
         app.launch()
-        let folderList = app.collectionViews.firstMatch
-        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
-        let pairedDevice = app.staticTexts.matching(NSPredicate(format: "label == %@", "RYRUFNS")).firstMatch
-        for _ in 0..<12 where !pairedDevice.isHittable {
-            folderList.swipeUp()
+        assertPairedDeviceVisible("RYRUFNS", in: app)
+    }
+
+    @MainActor
+    func testAddingUnnamedDeviceShowsIDPrefixUntilItAnnouncesItsName() {
+        guard let peerID = ProcessInfo.processInfo.environment["ROOSYNC_E2E_ANNOUNCED_PEER_ID"] else {
+            XCTFail("The announcing Docker peer was not provided.")
+            return
         }
-        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
+        let prefix = String(peerID.prefix(7))
+        let app = XCUIApplication()
+        app.launch()
+        tapAddMenu(in: app)
+        app.buttons["Add device"].tap()
+        let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
+        XCTAssertTrue(idField.waitForExistence(timeout: 15))
+        idField.tap()
+        idField.typeText(peerID)
+        let addButton = app.buttons["add-device-confirmation"]
+        addButton.tap()
+        XCTAssertTrue(addButton.waitForNonExistence(timeout: 30))
+        assertPairedDeviceVisible(prefix, in: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        visibleFolderRow("roosync-e2e-unnamed-folder", in: app).tap()
+        app.staticTexts["Share with devices"].tap()
+        let unnamedToggle = app.switches[prefix]
+        XCTAssertTrue(unnamedToggle.waitForExistence(timeout: 15))
+        unnamedToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        let shared = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: unnamedToggle)
+        XCTAssertEqual(XCTWaiter.wait(for: [shared], timeout: 15), .completed)
+        XCTAssertTrue(app.switches["Announced E2E Peer"].waitForExistence(timeout: 120))
+
+        app.terminate()
+        app.launch()
+        assertPairedDeviceVisible("Announced E2E Peer", in: app)
     }
 
     @MainActor
@@ -899,6 +930,17 @@ final class RooSyncUITests: XCTestCase {
     private func openE2EFolder(in app: XCUIApplication) {
         XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
         openFolder("roosync-e2e-vault", in: app)
+    }
+
+    @MainActor
+    private func assertPairedDeviceVisible(_ name: String, in app: XCUIApplication) {
+        let folderList = app.collectionViews.firstMatch
+        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
+        let pairedDevice = app.staticTexts.matching(NSPredicate(format: "label == %@", name)).firstMatch
+        for _ in 0..<12 where !pairedDevice.isHittable {
+            folderList.swipeUp()
+        }
+        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
     }
 
     @MainActor
