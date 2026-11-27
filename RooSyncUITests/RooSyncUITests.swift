@@ -421,10 +421,13 @@ final class RooSyncUITests: XCTestCase {
         let unlabeledOffer = pendingFolderRow("roosync-e2e-unlabeled-offer", in: app)
         XCTAssertTrue(unlabeledOffer.staticTexts["roosync-e2e-unlabeled-offer"].waitForExistence(timeout: 15))
 
-        for folderID in ["roosync-e2e-unlabeled-offer", "roosync-e2e-blank-label-offer"] {
+        let folderIDs = ["roosync-e2e-blank-label-offer", "roosync-e2e-unlabeled-offer"]
+        for folderID in folderIDs {
             let accept = app.buttons["accept-folder-\(folderID)"]
             accept.tap()
             XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
+        }
+        for folderID in folderIDs {
             let folderRow = visibleFolderRow(folderID, in: app)
             XCTAssertTrue(folderRow.staticTexts[folderID].waitForExistence(timeout: 15))
         }
