@@ -402,6 +402,114 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
+    func testPendingShareShowsSharingDeviceName() {
+        let app = XCUIApplication()
+        app.launch()
+        let offer = pendingFolderRow("roosync-e2e-blank-label-offer", in: app)
+        XCTAssertTrue(offer.waitForExistence(timeout: 60))
+        attachScreenshot(named: "Pending shares")
+        XCTAssertTrue(offer.staticTexts["Shared by Docker Syncthing E2E"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    func testUnlabeledPendingShareShowsFolderIDAndAcceptsAsNamedFolder() {
+        let app = XCUIApplication()
+        app.launch()
+        let blankLabelOffer = pendingFolderRow("roosync-e2e-blank-label-offer", in: app)
+        XCTAssertTrue(blankLabelOffer.waitForExistence(timeout: 60))
+        XCTAssertTrue(blankLabelOffer.staticTexts["roosync-e2e-blank-label-offer"].waitForExistence(timeout: 15))
+        let unlabeledOffer = pendingFolderRow("roosync-e2e-unlabeled-offer", in: app)
+        XCTAssertTrue(unlabeledOffer.staticTexts["roosync-e2e-unlabeled-offer"].waitForExistence(timeout: 15))
+
+        let folderIDs = ["roosync-e2e-blank-label-offer", "roosync-e2e-unlabeled-offer"]
+        for folderID in folderIDs {
+            let accept = app.buttons["accept-folder-\(folderID)"]
+            accept.tap()
+            XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
+        }
+        for folderID in folderIDs {
+            let folderRow = visibleFolderRow(folderID, in: app)
+            XCTAssertTrue(folderRow.staticTexts[folderID].waitForExistence(timeout: 15))
+        }
+        attachScreenshot(named: "Accepted unlabeled share")
+    }
+
+    @MainActor
+    func testUnnamedPendingDeviceShowsIDPrefixAndLearnsItsNameAfterAccept() {
+        guard let peerID = ProcessInfo.processInfo.environment["ROOSYNC_E2E_UNNAMED_PEER_ID"] else {
+            XCTFail("The unnamed Docker peer was not provided.")
+            return
+        }
+        let prefix = String(peerID.prefix(7))
+        let app = XCUIApplication()
+        app.launch()
+        let pendingDevice = app.cells.containing(NSPredicate(format: "label == %@", peerID)).firstMatch
+        XCTAssertTrue(pendingDevice.waitForExistence(timeout: 60))
+        XCTAssertTrue(pendingDevice.staticTexts[prefix].waitForExistence(timeout: 15))
+        pendingDevice.buttons["Accept"].tap()
+        XCTAssertTrue(pendingDevice.waitForNonExistence(timeout: 30))
+        assertPairedDeviceVisible(prefix, in: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        shareUnnamedFolder(withUnnamedDevices: [peerID], in: app)
+        XCTAssertTrue(app.switches["Renamed E2E Peer"].waitForExistence(timeout: 120))
+    }
+
+    @MainActor
+    func testUnlabeledFolderShowsItsIDAndUnnamedDeviceToggle() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        let folderRow = visibleFolderRow("roosync-e2e-unnamed-folder", in: app)
+        XCTAssertTrue(folderRow.staticTexts["roosync-e2e-unnamed-folder"].waitForExistence(timeout: 15))
+        folderRow.tap()
+        XCTAssertTrue(app.navigationBars["roosync-e2e-unnamed-folder"].waitForExistence(timeout: 15))
+        app.staticTexts["Share with devices"].tap()
+        XCTAssertTrue(app.switches["RYRUFNS"].waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    func testUnnamedPairedDeviceShowsIDPrefix() {
+        let app = XCUIApplication()
+        app.launch()
+        assertPairedDeviceVisible("RYRUFNS", in: app)
+    }
+
+    @MainActor
+    func testAddingUnnamedDeviceShowsIDPrefixUntilItAnnouncesItsName() {
+        guard let peerID = ProcessInfo.processInfo.environment["ROOSYNC_E2E_ANNOUNCED_PEER_ID"] else {
+            XCTFail("The announcing Docker peer was not provided.")
+            return
+        }
+        guard let spacedPeerID = ProcessInfo.processInfo.environment["ROOSYNC_E2E_SPACED_PEER_ID"] else {
+            XCTFail("The Docker peer for the spaces-only name was not provided.")
+            return
+        }
+        let prefix = String(peerID.prefix(7))
+        let spacedPrefix = String(spacedPeerID.prefix(7))
+        let app = XCUIApplication()
+        app.launch()
+        addDeviceThroughForm(id: peerID, name: "", in: app)
+        assertPairedDeviceVisible(prefix, in: app)
+        addDeviceThroughForm(id: spacedPeerID, name: "   ", in: app)
+        assertPairedDeviceVisible(spacedPrefix, in: app)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.staticTexts["device-id"].waitForExistence(timeout: 30))
+        shareUnnamedFolder(withUnnamedDevices: [peerID, spacedPeerID], in: app)
+        XCTAssertTrue(app.switches["Announced E2E Peer"].waitForExistence(timeout: 120))
+        XCTAssertTrue(app.switches["Spaced Name E2E Peer"].waitForExistence(timeout: 120))
+
+        app.terminate()
+        app.launch()
+        assertPairedDeviceVisible("Announced E2E Peer", in: app)
+        assertPairedDeviceVisible("Spaced Name E2E Peer", in: app)
+    }
+
+    @MainActor
     func testPassiveRefreshFailurePreservesFolderDraftAndRecovers() {
         let app = XCUIApplication()
         app.launchArguments.append("--roosync-e2e-core-controls")
@@ -835,7 +943,58 @@ final class RooSyncUITests: XCTestCase {
     }
 
     @MainActor
-    private func openFolder(_ folderID: String, in app: XCUIApplication) {
+    private func addDeviceThroughForm(id: String, name: String, in app: XCUIApplication) {
+        tapAddMenu(in: app)
+        app.buttons["Add device"].tap()
+        let idField = app.descendants(matching: .any).matching(identifier: "device-id-entry").firstMatch
+        XCTAssertTrue(idField.waitForExistence(timeout: 15))
+        idField.tap()
+        idField.typeText(id)
+        if !name.isEmpty {
+            let nameField = app.textFields["Name"]
+            nameField.tap()
+            nameField.typeText(name)
+            XCTAssertEqual(nameField.value as? String, name)
+        }
+        let addButton = app.buttons["add-device-confirmation"]
+        addButton.tap()
+        XCTAssertTrue(addButton.waitForNonExistence(timeout: 30))
+    }
+
+    @MainActor
+    private func shareUnnamedFolder(withUnnamedDevices deviceIDs: [String], in app: XCUIApplication) {
+        visibleFolderRow("roosync-e2e-unnamed-folder", in: app).tap()
+        app.staticTexts["Share with devices"].tap()
+        for deviceID in deviceIDs {
+            let toggle = app.switches[String(deviceID.prefix(7))]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+            toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+            let shared = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", "1"),
+                object: app.switches["share-device-\(deviceID)"]
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [shared], timeout: 15), .completed)
+        }
+    }
+
+    @MainActor
+    private func assertPairedDeviceVisible(_ name: String, in app: XCUIApplication) {
+        let folderList = app.collectionViews.firstMatch
+        XCTAssertTrue(folderList.waitForExistence(timeout: 15))
+        let pairedDevice = app.staticTexts.matching(NSPredicate(format: "label == %@", name)).firstMatch
+        for _ in 0..<12 where !pairedDevice.isHittable {
+            folderList.swipeUp()
+        }
+        XCTAssertTrue(pairedDevice.waitForExistence(timeout: 15))
+    }
+
+    @MainActor
+    private func pendingFolderRow(_ folderID: String, in app: XCUIApplication) -> XCUIElement {
+        app.cells.containing(.button, identifier: "accept-folder-\(folderID)").firstMatch
+    }
+
+    @MainActor
+    private func visibleFolderRow(_ folderID: String, in app: XCUIApplication) -> XCUIElement {
         let folderList = app.collectionViews.firstMatch
         XCTAssertTrue(folderList.waitForExistence(timeout: 15))
         let folder = app.descendants(matching: .any)
@@ -858,6 +1017,11 @@ final class RooSyncUITests: XCTestCase {
         }
         XCTAssertTrue(folder.waitForExistence(timeout: 30))
         XCTAssertTrue(folder.isHittable)
-        folder.tap()
+        return folder
+    }
+
+    @MainActor
+    private func openFolder(_ folderID: String, in app: XCUIApplication) {
+        visibleFolderRow(folderID, in: app).tap()
     }
 }

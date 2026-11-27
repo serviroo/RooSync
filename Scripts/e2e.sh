@@ -7,8 +7,15 @@ PEER_IMAGE="syncthing/syncthing:2.1.7"
 APP_REST="http://127.0.0.1:8384"
 PEER_REST="http://127.0.0.1:8385"
 PEER_SYNC_PORT=22002
+UNNAMED_PEER_REST_PORT=8386
+ANNOUNCED_PEER_REST_PORT=8387
+SPACED_PEER_REST_PORT=8388
+APP_SYNC_PORT=22000
 RUN_ID="${GITHUB_RUN_ID:-$(date +%s)-$$}"
 CONTAINER_NAME="roosync-e2e-$RUN_ID"
+UNNAMED_PEER_CONTAINER_NAME="roosync-e2e-unnamed-$RUN_ID"
+ANNOUNCED_PEER_CONTAINER_NAME="roosync-e2e-announced-$RUN_ID"
+SPACED_PEER_CONTAINER_NAME="roosync-e2e-spaced-$RUN_ID"
 VOLUME_NAME="roosync-e2e-$RUN_ID"
 E2E_DIR="$ROOT/.build/e2e/$RUN_ID"
 DERIVED_DATA="$E2E_DIR/DerivedData"
@@ -305,12 +312,15 @@ cleanup() {
 	if [[ -n "$TUNNEL_PID" ]]; then
 		if [[ -n "${LIMA_HOME:-}" && -f "$LIMA_HOME/colima/ssh.config" ]]; then
 			ssh -F "$LIMA_HOME/colima/ssh.config" -O cancel -L 127.0.0.1:8385:127.0.0.1:8385 lima-colima >/dev/null 2>&1 || true
+			for port in "$UNNAMED_PEER_REST_PORT" "$ANNOUNCED_PEER_REST_PORT" "$SPACED_PEER_REST_PORT"; do
+				ssh -F "$LIMA_HOME/colima/ssh.config" -O cancel -L "127.0.0.1:$port:127.0.0.1:$port" lima-colima >/dev/null 2>&1 || true
+			done
 			ssh -F "$LIMA_HOME/colima/ssh.config" -O cancel -L "127.0.0.1:$PEER_SYNC_PORT:127.0.0.1:$PEER_SYNC_PORT" lima-colima >/dev/null 2>&1 || true
 		fi
 		kill "$TUNNEL_PID" >/dev/null 2>&1 || true
 	fi
 	if ((${#DOCKER[@]})); then
-		"${DOCKER[@]}" rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+		"${DOCKER[@]}" rm -f "$CONTAINER_NAME" "$UNNAMED_PEER_CONTAINER_NAME" "$ANNOUNCED_PEER_CONTAINER_NAME" "$SPACED_PEER_CONTAINER_NAME" >/dev/null 2>&1 || true
 		"${DOCKER[@]}" volume rm "$VOLUME_NAME" >/dev/null 2>&1 || true
 	fi
 	if [[ "$SIMULATOR_CREATED" == 1 ]]; then
@@ -338,6 +348,9 @@ if [[ -f "$HOME/.colima/_lima/colima/ssh.config" ]] && command -v limactl >/dev/
 	"${DOCKER[@]}" info >/dev/null
 	ssh -F "$LIMA_HOME/colima/ssh.config" -N -o ExitOnForwardFailure=yes \
 		-L 127.0.0.1:8385:127.0.0.1:8385 \
+		-L "127.0.0.1:$UNNAMED_PEER_REST_PORT:127.0.0.1:$UNNAMED_PEER_REST_PORT" \
+		-L "127.0.0.1:$ANNOUNCED_PEER_REST_PORT:127.0.0.1:$ANNOUNCED_PEER_REST_PORT" \
+		-L "127.0.0.1:$SPACED_PEER_REST_PORT:127.0.0.1:$SPACED_PEER_REST_PORT" \
 		-L "127.0.0.1:$PEER_SYNC_PORT:127.0.0.1:$PEER_SYNC_PORT" \
 		lima-colima >"$E2E_DIR/lima-forward.log" 2>&1 &
 	TUNNEL_PID=$!
@@ -1062,18 +1075,136 @@ cp "$APP_FOLDER/$DELETE_FIXTURE_NAME" "$DELETE_ORIGINAL_SNAPSHOT"
 cmp "$DELETE_ORIGINAL_SNAPSHOT" "$DESKTOP_FOLDER/$DELETE_FIXTURE_NAME" || fail "The Delete fixture original differs between peers before resolution."
 set_folder_paused "$PEER_REST" "$PEER_API_KEY" true
 
+UNNAMED_FOLDER_PATH="$APP_DATA/Documents/Vaults/Unnamed E2E Folder"
+mkdir -p "$UNNAMED_FOLDER_PATH"
+add_folder_config "$APP_REST" "$APP_API_KEY" roosync-e2e-unnamed-folder "" "$UNNAMED_FOLDER_PATH" ""
+add_device "$APP_REST" "$APP_API_KEY" RYRUFNS-MOD5UG3-7723E52-GYC6AZZ-PYBFIIN-GPGU4RL-YHLDUF5-C2UZNQE "" ""
+"${DOCKER[@]}" exec --user "$PEER_UID:$PEER_GID" "$CONTAINER_NAME" \
+	mkdir -p /tmp/roosync-unlabeled /tmp/roosync-blank-label
+add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-unlabeled-offer "" /tmp/roosync-unlabeled "$APP_ID"
+add_folder_config "$PEER_REST" "$PEER_API_KEY" roosync-e2e-blank-label-offer "   " /tmp/roosync-blank-label "$APP_ID"
+start_unpaired_peer() {
+	local container=$1 port=$2
+	STARTED_PEER_API_KEY=""
+	STARTED_PEER_ID=""
+	"${DOCKER[@]}" run -d --name "$container" --user 0:0 \
+		-e PUID="$PEER_UID" \
+		-e PGID="$PEER_GID" \
+		-e STGUIADDRESS=0.0.0.0:8384 \
+		-p "127.0.0.1:$port:8384/tcp" \
+		"$PEER_IMAGE" >/dev/null
+	for _ in $(seq 1 150); do
+		STARTED_PEER_API_KEY="$("${DOCKER[@]}" exec "$container" cat /var/syncthing/config/config.xml 2>/dev/null | python3 -c 'import sys,xml.etree.ElementTree as ET; node=ET.fromstring(sys.stdin.read()).find("./gui/apikey"); print(node.text if node is not None and node.text else "")' 2>/dev/null || true)"
+		if [[ -n "$STARTED_PEER_API_KEY" ]]; then
+			STARTED_PEER_ID="$(api_request "http://127.0.0.1:$port" "$STARTED_PEER_API_KEY" GET /rest/system/status "" 2 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["myID"])' 2>/dev/null || true)"
+			[[ -n "$STARTED_PEER_ID" ]] && return 0
+		fi
+		sleep 2
+	done
+	fail "Docker Syncthing peer $container REST API did not start on 127.0.0.1:$port."
+}
+start_unpaired_peer "$UNNAMED_PEER_CONTAINER_NAME" "$UNNAMED_PEER_REST_PORT"
+UNNAMED_PEER_REST="http://127.0.0.1:$UNNAMED_PEER_REST_PORT"
+UNNAMED_PEER_API_KEY="$STARTED_PEER_API_KEY"
+UNNAMED_PEER_ID="$STARTED_PEER_ID"
+api_request "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" PATCH "/rest/config/devices/$UNNAMED_PEER_ID" '{"name":""}' >/dev/null
+add_device "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
+start_announcing_peer() {
+	local container=$1 port=$2 name=$3
+	start_unpaired_peer "$container" "$port"
+	api_request "http://127.0.0.1:$port" "$STARTED_PEER_API_KEY" PATCH "/rest/config/devices/$STARTED_PEER_ID" "{\"name\":\"$name\"}" >/dev/null
+	api_request "http://127.0.0.1:$port" "$STARTED_PEER_API_KEY" PATCH /rest/config/options \
+		'{"globalAnnounceEnabled":false,"localAnnounceEnabled":false,"relaysEnabled":false}' >/dev/null
+}
+start_announcing_peer "$ANNOUNCED_PEER_CONTAINER_NAME" "$ANNOUNCED_PEER_REST_PORT" "Announced E2E Peer"
+ANNOUNCED_PEER_API_KEY="$STARTED_PEER_API_KEY"
+ANNOUNCED_PEER_ID="$STARTED_PEER_ID"
+start_announcing_peer "$SPACED_PEER_CONTAINER_NAME" "$SPACED_PEER_REST_PORT" "Spaced Name E2E Peer"
+SPACED_PEER_API_KEY="$STARTED_PEER_API_KEY"
+SPACED_PEER_ID="$STARTED_PEER_ID"
+DISPLAY_NAME_FIXTURES_READY=false
+for _ in $(seq 1 90); do
+	if python3 -c 'import json,sys; devices=json.loads(sys.argv[1] or "{}"); folders=json.loads(sys.argv[2] or "{}"); raise SystemExit(not (devices.get(sys.argv[3], {}).get("name") == "" and {"roosync-e2e-unlabeled-offer", "roosync-e2e-blank-label-offer"} <= folders.keys()))' \
+		"$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/cluster/pending/devices 2>/dev/null || true)" \
+		"$(api_request "$APP_REST" "$APP_API_KEY" GET /rest/cluster/pending/folders 2>/dev/null || true)" \
+		"$UNNAMED_PEER_ID" 2>/dev/null; then
+		DISPLAY_NAME_FIXTURES_READY=true
+		break
+	fi
+	sleep 1
+done
+[[ "$DISPLAY_NAME_FIXTURES_READY" == true ]] || fail "The unnamed pending device and unlabeled folder offers did not reach the simulator."
+
+unnamed_folder_shared_with() {
+	local app_api_key=$1 device_id=$2
+	api_request "$APP_REST" "$app_api_key" GET /rest/config/folders/roosync-e2e-unnamed-folder 2>/dev/null |
+		python3 -c 'import json,sys; raise SystemExit(sys.argv[1] not in [d["deviceID"] for d in json.load(sys.stdin).get("devices", [])])' "$device_id" 2>/dev/null
+}
+(
+	announced_paired=false
+	spaced_paired=false
+	unnamed_recorded=false
+	unnamed_renamed=false
+	until [[ "$announced_paired" == true && "$spaced_paired" == true && "$unnamed_renamed" == true ]]; do
+		app_config="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data 2>/dev/null)/Library/Application Support/RooSync/config/config.xml"
+		app_api_key="$(python3 -c 'import sys,xml.etree.ElementTree as ET; node=ET.parse(sys.argv[1]).getroot().find("./gui/apikey"); print(node.text if node is not None and node.text else "")' "$app_config" 2>/dev/null || true)"
+		if [[ "$announced_paired" == false ]] && unnamed_folder_shared_with "$app_api_key" "$ANNOUNCED_PEER_ID"; then
+			add_device "http://127.0.0.1:$ANNOUNCED_PEER_REST_PORT" "$ANNOUNCED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
+			announced_paired=true
+		fi
+		if [[ "$spaced_paired" == false ]] && unnamed_folder_shared_with "$app_api_key" "$SPACED_PEER_ID"; then
+			add_device "http://127.0.0.1:$SPACED_PEER_REST_PORT" "$SPACED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
+			spaced_paired=true
+		fi
+		if [[ "$unnamed_recorded" == false ]] && accepted_name="$(api_request "$APP_REST" "$app_api_key" GET "/rest/config/devices/$UNNAMED_PEER_ID" 2>/dev/null |
+			python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["name"]))' 2>/dev/null)"; then
+			printf '%s\n' "$accepted_name" >"$E2E_DIR/accepted-unnamed-device-name.json"
+			unnamed_recorded=true
+		fi
+		if [[ "$unnamed_recorded" == true && "$unnamed_renamed" == false ]] && unnamed_folder_shared_with "$app_api_key" "$UNNAMED_PEER_ID"; then
+			if [[ "$accepted_name" == '""' ]]; then
+				api_request "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" PATCH "/rest/config/devices/$UNNAMED_PEER_ID" '{"name":"Renamed E2E Peer"}' >/dev/null
+				set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true
+				wait_for_device_connection_state "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true
+				set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" false
+			fi
+			unnamed_renamed=true
+		fi
+		sleep 1
+	done
+) &
+NAME_PEERS_PID=$!
+
 xcrun simctl terminate "$SIMULATOR_UDID" "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 APP_INSTALLED=1
+TEST_RUNNER_ROOSYNC_E2E_UNNAMED_PEER_ID="$UNNAMED_PEER_ID" \
+TEST_RUNNER_ROOSYNC_E2E_ANNOUNCED_PEER_ID="$ANNOUNCED_PEER_ID" \
+TEST_RUNNER_ROOSYNC_E2E_SPACED_PEER_ID="$SPACED_PEER_ID" \
 xcodebuild -project "$ROOT/RooSync.xcodeproj" -scheme RooSync \
 	-destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
 	-derivedDataPath "$DERIVED_DATA" -parallel-testing-enabled NO \
 	-maximum-concurrent-test-simulator-destinations 1 \
 	CODE_SIGNING_ALLOWED=NO test-without-building \
 	-only-testing:RooSyncUITests/RooSyncUITests/testConflictCopyCanBeDeleted \
+	-only-testing:RooSyncUITests/RooSyncUITests/testPendingShareShowsSharingDeviceName \
+	-only-testing:RooSyncUITests/RooSyncUITests/testUnlabeledPendingShareShowsFolderIDAndAcceptsAsNamedFolder \
+	-only-testing:RooSyncUITests/RooSyncUITests/testUnnamedPendingDeviceShowsIDPrefixAndLearnsItsNameAfterAccept \
+	-only-testing:RooSyncUITests/RooSyncUITests/testUnlabeledFolderShowsItsIDAndUnnamedDeviceToggle \
+	-only-testing:RooSyncUITests/RooSyncUITests/testUnnamedPairedDeviceShowsIDPrefix \
+	-only-testing:RooSyncUITests/RooSyncUITests/testAddingUnnamedDeviceShowsIDPrefixUntilItAnnouncesItsName \
 	-resultBundlePath "$E2E_DIR/DeleteConflict-E2E.xcresult" >"$E2E_DIR/delete-conflict-test.log" 2>&1 || {
+	kill "$NAME_PEERS_PID" >/dev/null 2>&1 || true
 	grep -nE 'error:|failed|Failure|TEST FAILED' "$E2E_DIR/delete-conflict-test.log" | tail -80 >&2 || true
-	fail "Real-core Delete conflict UI test failed; see $E2E_DIR/delete-conflict-test.log."
+	fail "Real-core Delete conflict or folder and device name UI tests failed; see $E2E_DIR/delete-conflict-test.log."
 }
+kill "$NAME_PEERS_PID" >/dev/null 2>&1 || true
+ACCEPTED_UNNAMED_NAME="$(cat "$E2E_DIR/accepted-unnamed-device-name.json" 2>/dev/null || true)"
+[[ "$ACCEPTED_UNNAMED_NAME" == '""' ]] || fail "Accepting the unnamed pending device saved the name ${ACCEPTED_UNNAMED_NAME:-nothing} instead of an empty name."
+python3 -c 'import sys,xml.etree.ElementTree as ET; labels={f.get("id"): f.get("label") for f in ET.parse(sys.argv[1]).getroot().findall("./folder")}; raise SystemExit(any(labels.get(i) != i for i in sys.argv[2:]))' \
+	"$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)/Library/Application Support/RooSync/config/config.xml" \
+	roosync-e2e-unlabeled-offer roosync-e2e-blank-label-offer ||
+	fail "Accepted folder offers without a label were not saved with their folder ID as the label."
+printf '%s\n' 'PASS: unnamed devices were saved with an empty name and unlabeled folders with their folder ID.'
 
 APP_DATA="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data)"
 EXISTING_OFFER_PATH="$APP_DATA/Documents/Vaults/Existing E2E Offer"
@@ -1138,6 +1269,8 @@ printf '%s\n' \
 	'PASS: empty and slash-containing folder labels were accepted with safe paths.' \
 	'PASS: duplicate external folder IDs were rejected without overwriting config.' \
 	'PASS: canonical-equivalent folder offers did not share unrelated configuration.' \
+	'PASS: unnamed devices and unlabeled folders showed their IDs on every screen.' \
+	'PASS: devices added or accepted without a name took the name they announced on connect.' \
 	'PASS: pending-ID collisions fail closed while configured status and policy refresh.' \
 	'PASS: sample Obsidian vault synced in both directions.' \
 	'PASS: concurrent edits created a Syncthing conflict copy.' \

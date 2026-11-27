@@ -71,7 +71,7 @@ private struct FolderListView: View {
                         ForEach(store.pendingDevices) { device in
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text(device.name)
+                                    Text(device.displayName)
                                     Text(device.id)
                                         .font(.caption.monospaced())
                                         .textSelection(.enabled)
@@ -86,8 +86,8 @@ private struct FolderListView: View {
                         ForEach(store.pendingFolders) { folder in
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text(folder.name)
-                                    Text("Shared by \(folder.deviceID.prefix(7))…")
+                                    Text(folder.displayName)
+                                    Text("Shared by \(store.sharerName(for: folder.deviceID))")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                                 Spacer()
@@ -117,8 +117,8 @@ private struct FolderListView: View {
                     }
                     ForEach(store.devices) { device in
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(device.name)
-                                .accessibilityIdentifier("paired-device-name-\(device.name)")
+                            Text(device.displayName)
+                                .accessibilityIdentifier("paired-device-name-\(device.displayName)")
                             Text(device.deviceID)
                                 .font(.caption.monospaced())
                                 .foregroundStyle(.secondary)
@@ -249,7 +249,7 @@ private struct FolderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label(folder.label, systemImage: folder.paused ? "pause.circle" : "folder")
+                Label(folder.displayName, systemImage: folder.paused ? "pause.circle" : "folder")
                     .font(.headline)
                 Spacer()
                 if conflicts > 0 {
@@ -539,7 +539,7 @@ private struct FolderDetailView: View {
                         }
                     }
                 }
-                .navigationTitle(folder.label)
+                .navigationTitle(folder.displayName)
                 .navigationBarTitleDisplayMode(.inline)
                 .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder], allowsMultipleSelection: false) { result in
                     guard case let .success(urls) = result, let url = urls.first else { return }
@@ -570,13 +570,14 @@ private struct FolderSharingView: View {
                 ContentUnavailableView("No devices", systemImage: "desktopcomputer", description: Text("Add a device before sharing this folder."))
             }
             ForEach(store.devices) { device in
-                Toggle(device.name, isOn: Binding(
+                Toggle(device.displayName, isOn: Binding(
                     get: { folder?.devices.contains { $0.deviceID == device.deviceID } ?? false },
                     set: { shared in
                         guard let folder else { return }
                         Task { await store.setSharing(folder, deviceID: device.deviceID, shared: shared) }
                     }
                 ))
+                .accessibilityIdentifier("share-device-\(device.deviceID)")
             }
         }
         .navigationTitle("Share folder")

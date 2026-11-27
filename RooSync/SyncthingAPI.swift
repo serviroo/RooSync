@@ -6,6 +6,7 @@ struct SyncthingDevice: Decodable, Identifiable, Equatable, Sendable {
     let addresses: [String]?
 
     var id: String { deviceID }
+    var displayName: String { nonBlank(name, or: String(deviceID.prefix(7))) }
 }
 
 struct SyncthingFolder: Decodable, Identifiable, Equatable, Sendable {
@@ -23,6 +24,8 @@ struct SyncthingFolder: Decodable, Identifiable, Equatable, Sendable {
         paused = try values.decodeIfPresent(Bool.self, forKey: .paused) ?? false
         devices = try values.decodeIfPresent([FolderShare].self, forKey: .devices) ?? []
     }
+
+    var displayName: String { nonBlank(label, or: id) }
 
     private enum CodingKeys: String, CodingKey {
         case id, label, path, paused, devices
@@ -66,12 +69,20 @@ struct FolderStatus: Decodable, Equatable, Sendable {
 struct PendingDevice: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
+
+    var displayName: String { nonBlank(name, or: String(id.prefix(7))) }
 }
 
 struct PendingFolder: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     let deviceID: String
+
+    var displayName: String { nonBlank(name, or: id) }
+}
+
+func nonBlank(_ name: String, or fallback: String) -> String {
+    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? fallback : name
 }
 
 @MainActor
@@ -108,7 +119,7 @@ final class SyncthingAPI {
     func addDevice(id: String, name: String, address: String? = nil, allowedNetworks: [String]? = nil) async throws {
         var value = try await json("/rest/config/defaults/device") as? [String: Any] ?? [:]
         value["deviceID"] = id.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        value["name"] = name.isEmpty ? "Syncthing device" : name
+        value["name"] = nonBlank(name, or: "")
         if let address, !address.isEmpty { value["addresses"] = [address] }
         if let allowedNetworks { value["allowedNetworks"] = allowedNetworks }
         try await send("/rest/config/devices", method: "POST", json: value)
@@ -169,7 +180,7 @@ final class SyncthingAPI {
         return value.map { key, info in
             PendingDevice(id: key, name: info["name"] as? String ?? info["deviceName"] as? String ?? key)
         }.sorted {
-            let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+            let order = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
             return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
         }
     }
@@ -187,7 +198,7 @@ final class SyncthingAPI {
                 PendingFolder(id: folderID, name: offer["label"] as? String ?? folderID, deviceID: deviceID)
             }
         }.sorted {
-            let nameOrder = $0.name.localizedCaseInsensitiveCompare($1.name)
+            let nameOrder = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
             if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
             if $0.id != $1.id { return $0.id < $1.id }
             return $0.deviceID < $1.deviceID

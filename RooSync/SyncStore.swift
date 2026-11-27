@@ -145,7 +145,7 @@ final class SyncStore: ObservableObject {
                     Self.canonicalDeviceID(normalizeDeviceID($0.deviceID)) != Self.canonicalDeviceID(refreshedDeviceID)
                 }
                 .sorted {
-                    let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+                    let order = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
                     return order == .orderedSame ? $0.deviceID < $1.deviceID : order == .orderedAscending
                 }
             let refreshedPendingDevices = try await api.pendingDevices()
@@ -413,6 +413,10 @@ final class SyncStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func sharerName(for deviceID: String) -> String {
+        nonBlank(devices.first { $0.deviceID == deviceID }?.name ?? "", or: "\(deviceID.prefix(7))…")
     }
 
     func accept(_ device: PendingDevice) async {
