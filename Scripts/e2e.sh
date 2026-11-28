@@ -1140,7 +1140,7 @@ app_get() {
 	app_status=0
 	app_body=""
 	response="$(printf 'header = "X-API-Key: %s"\n' "$app_api_key" |
-		curl --config - --noproxy '*' -sS -w '\n%{http_code}' "$APP_REST$1" 2>/dev/null)" || return 0
+		curl -q --config - --noproxy '*' -sS -w '\n%{http_code}' "$APP_REST$1" 2>/dev/null)" || return 0
 	app_status="${response##*$'\n'}"
 	app_body="${response%$'\n'*}"
 	if [[ "$app_status" == 401 || "$app_status" == 403 ]]; then

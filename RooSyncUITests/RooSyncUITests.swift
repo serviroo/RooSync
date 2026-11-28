@@ -446,8 +446,9 @@ final class RooSyncUITests: XCTestCase {
         let pendingDevice = app.cells.containing(NSPredicate(format: "label == %@", peerID)).firstMatch
         XCTAssertTrue(pendingDevice.waitForExistence(timeout: 60))
         XCTAssertTrue(pendingDevice.staticTexts[prefix].waitForExistence(timeout: 15))
-        pendingDevice.buttons["Accept"].tap()
-        XCTAssertTrue(pendingDevice.waitForNonExistence(timeout: 30))
+        let accept = pendingDevice.buttons["Accept"]
+        accept.tap()
+        XCTAssertTrue(accept.waitForNonExistence(timeout: 30))
         assertPairedDeviceVisible(prefix, in: app)
 
         app.terminate()
