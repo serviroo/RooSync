@@ -1135,41 +1135,64 @@ for _ in $(seq 1 90); do
 done
 [[ "$DISPLAY_NAME_FIXTURES_READY" == true ]] || fail "The unnamed pending device and unlabeled folder offers did not reach the simulator."
 
-unnamed_folder_shared_with() {
-	local app_api_key=$1 device_id=$2
-	api_request "$APP_REST" "$app_api_key" GET /rest/config/folders/roosync-e2e-unnamed-folder 2>/dev/null |
-		python3 -c 'import json,sys; raise SystemExit(sys.argv[1] not in [d["deviceID"] for d in json.load(sys.stdin).get("devices", [])])' "$device_id" 2>/dev/null
+app_get() {
+	local response
+	app_status=0
+	app_body=""
+	response="$(printf 'header = "X-API-Key: %s"\n' "$app_api_key" |
+		curl -q --config - --noproxy '*' -sS -w '\n%{http_code}' "$APP_REST$1" 2>/dev/null)" || return 0
+	app_status="${response##*$'\n'}"
+	app_body="${response%$'\n'*}"
+	if [[ "$app_status" == 401 || "$app_status" == 403 ]]; then
+		app_api_key=""
+		return 1
+	fi
+}
+name_peers_pass() {
+	local app_data members
+	if [[ -z "$app_api_key" ]]; then
+		app_data="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data 2>/dev/null)" || return 0
+		app_api_key="$(python3 -c 'import sys,xml.etree.ElementTree as ET; node=ET.parse(sys.argv[1]).getroot().find("./gui/apikey"); print(node.text if node is not None and node.text else "")' "$app_data/Library/Application Support/RooSync/config/config.xml" 2>/dev/null || true)"
+		[[ -n "$app_api_key" ]] || return 0
+	fi
+	if [[ "$unnamed_recorded" == false ]]; then
+		app_get "/rest/config/devices/$UNNAMED_PEER_ID" || return 0
+		if [[ "$app_status" == 200 && "$app_body" =~ $device_name_pattern ]]; then
+			accepted_name="${BASH_REMATCH[1]}"
+			printf '%s\n' "$accepted_name" >"$E2E_DIR/accepted-unnamed-device-name.json"
+			unnamed_recorded=true
+		fi
+	fi
+	app_get /rest/config/folders/roosync-e2e-unnamed-folder || return 0
+	[[ "$app_status" == 200 ]] || return 0
+	members="$(python3 -c 'import json,sys; ids={d.get("deviceID") for d in json.load(sys.stdin).get("devices", [])}; print(" ".join(name for name, device in zip(("announced", "spaced", "unnamed"), sys.argv[1:]) if device in ids))' "$ANNOUNCED_PEER_ID" "$SPACED_PEER_ID" "$UNNAMED_PEER_ID" <<<"$app_body" 2>/dev/null)" || return 0
+	if [[ "$announced_paired" == false && " $members " == *" announced "* ]]; then
+		add_device "http://127.0.0.1:$ANNOUNCED_PEER_REST_PORT" "$ANNOUNCED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
+		announced_paired=true
+	fi
+	if [[ "$spaced_paired" == false && " $members " == *" spaced "* ]]; then
+		add_device "http://127.0.0.1:$SPACED_PEER_REST_PORT" "$SPACED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
+		spaced_paired=true
+	fi
+	if [[ "$unnamed_recorded" == true && "$unnamed_renamed" == false && " $members " == *" unnamed "* ]]; then
+		if [[ "$accepted_name" == '""' ]]; then
+			api_request "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" PATCH "/rest/config/devices/$UNNAMED_PEER_ID" '{"name":"Renamed E2E Peer"}' >/dev/null
+			set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true
+			wait_for_device_connection_state "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true
+			set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" false
+		fi
+		unnamed_renamed=true
+	fi
 }
 (
 	announced_paired=false
 	spaced_paired=false
 	unnamed_recorded=false
 	unnamed_renamed=false
+	app_api_key=""
+	device_name_pattern='"name": *("([^"\\]|\\.)*")'
 	until [[ "$announced_paired" == true && "$spaced_paired" == true && "$unnamed_renamed" == true ]]; do
-		app_config="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" data 2>/dev/null)/Library/Application Support/RooSync/config/config.xml"
-		app_api_key="$(python3 -c 'import sys,xml.etree.ElementTree as ET; node=ET.parse(sys.argv[1]).getroot().find("./gui/apikey"); print(node.text if node is not None and node.text else "")' "$app_config" 2>/dev/null || true)"
-		if [[ "$announced_paired" == false ]] && unnamed_folder_shared_with "$app_api_key" "$ANNOUNCED_PEER_ID"; then
-			add_device "http://127.0.0.1:$ANNOUNCED_PEER_REST_PORT" "$ANNOUNCED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
-			announced_paired=true
-		fi
-		if [[ "$spaced_paired" == false ]] && unnamed_folder_shared_with "$app_api_key" "$SPACED_PEER_ID"; then
-			add_device "http://127.0.0.1:$SPACED_PEER_REST_PORT" "$SPACED_PEER_API_KEY" "$APP_ID" "RooSync Simulator" "tcp://host.docker.internal:$APP_SYNC_PORT"
-			spaced_paired=true
-		fi
-		if [[ "$unnamed_recorded" == false ]] && accepted_name="$(api_request "$APP_REST" "$app_api_key" GET "/rest/config/devices/$UNNAMED_PEER_ID" 2>/dev/null |
-			python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["name"]))' 2>/dev/null)"; then
-			printf '%s\n' "$accepted_name" >"$E2E_DIR/accepted-unnamed-device-name.json"
-			unnamed_recorded=true
-		fi
-		if [[ "$unnamed_recorded" == true && "$unnamed_renamed" == false ]] && unnamed_folder_shared_with "$app_api_key" "$UNNAMED_PEER_ID"; then
-			if [[ "$accepted_name" == '""' ]]; then
-				api_request "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" PATCH "/rest/config/devices/$UNNAMED_PEER_ID" '{"name":"Renamed E2E Peer"}' >/dev/null
-				set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true
-				wait_for_device_connection_state "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" true
-				set_device_paused "$UNNAMED_PEER_REST" "$UNNAMED_PEER_API_KEY" "$APP_ID" false
-			fi
-			unnamed_renamed=true
-		fi
+		name_peers_pass
 		sleep 1
 	done
 ) &
